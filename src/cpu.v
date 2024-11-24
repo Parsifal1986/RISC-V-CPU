@@ -1,6 +1,9 @@
 // RISCV32 CPU top module
 // port modification allowed for debugging purposes
 
+`include "src/common/register_file/register_file.v"
+`include "src/common/alu/alu.v"
+
 module cpu(
   input  wire                 clk_in,			// system clock signal
   input  wire                 rst_in,			// reset signal
@@ -28,15 +31,50 @@ module cpu(
 // - 0x30004 read: read clocks passed since cpu starts (in dword, 4 bytes)
 // - 0x30004 write: indicates program stop (will output '\0' through uart tx)
 
-reg [31:0] registers[0:31];
-reg [31:0] registers_state[0:31];
+wire [73:0] cdb; // cdb[32:1] for alu_data, cdb[0] for alu_done, cdb[36:33] for alu_tag, cdb[69:38] for ls_data, cdb[37] for ls_done, cdb[73:70] for ls_tag
+
+wire register_file_write_enable;
+wire [4:0] register_file_write_addr;
+wire [31:0] register_file_write_data;
+wire [4:0] register_file_read_addr1;
+wire [4:0] register_file_read_addr2;
+wire [36:0] register_file_read_data1;
+wire [36:0] register_file_read_data2;
+
 reg [31:0] pc;
 reg [31:0] jump;
 reg [31:0] head_tag;
 reg need_jump;
 reg flush;
 
-wire ;
+wire [31:0] alu_a;
+wire [31:0] alu_b;
+wire [4:0] alu_op;
+wire [3:0] alu_tag;
+
+register_file rf_unit(
+  .clk(clk_in),
+  .read_addr1(register_file_read_addr1),
+  .read_addr2(register_file_read_addr2),
+  .write_addr(register_file_write_addr),
+  .write_enable(register_file_write_enable),
+  .write_data(register_file_write_data),
+  .read_data1(register_file_read_data1),
+  .read_data2(register_file_read_data2)
+);
+
+
+
+alu alu_unit(
+  .clk(clk_in),
+  .a(alu_a),
+  .b(alu_b),
+  .alu_op(alu_op),
+  .tag(alu_tag),
+  .cdb_alu_data(cdb[31:0]),
+  .cdb_alu_tag(cdb[35:32]),
+  .cdb_alu_done(cdb[36])
+);
 
 always @(posedge clk_in)
   begin
