@@ -437,7 +437,7 @@ task decode_opcode_10(
         case (compressed_instr[15:13])
             3'b000: begin // C.SLLI
                 expanded_instr = {
-                    6'b000000, compressed_instr[12], compressed_instr[6:2], // Immediate
+                    7'b0000000, compressed_instr[6:2], // Immediate
                     compressed_instr[11:7], // rd
                     3'b001, compressed_instr[11:7], // rs1
                     7'b0010011 // SLLI opcode
