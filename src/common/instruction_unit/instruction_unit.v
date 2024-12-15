@@ -43,6 +43,8 @@ reg [7:0] array_size;
 
 reg [31:0] output_expanded;
 
+reg [31:0] need_ins_pc;
+
 reg flag;
 
 integer i;
@@ -71,7 +73,8 @@ always @(posedge clk) begin
     begin // InputWork
       next = pc;
       if (icache_ready[1]) begin
-        if (!abandon) begin
+        if (!abandon || (abandon && need_ins_pc == instruction_addr)) begin
+          abandon <= 0;
           if (!half_instruction) begin
             if (instruction_data[1:0] == 2'b11) begin
               instruction_queue[tail] = {instruction_data, instruction_addr};
@@ -83,11 +86,13 @@ always @(posedge clk) begin
                   instruction_queue[tail][65] = if_jump;
                   if (if_jump) begin
                     abandon <= 1;
+                    need_ins_pc = next;
                   end
                 end else if (instruction_data[6:0] == 7'b1101111) begin
                   next = (instruction_addr + ((instruction_data[31] ? 32'hfff00000 : 0) | (instruction_data[19:12] << 12) | (instruction_data[20] << 11) | (instruction_data[30:21] << 1))) & 32'hfffffffe;
                   abandon <= 1;
                   program_counter <= next;
+                  need_ins_pc = next;
                 end
               end
               tail = tail + 1;
@@ -104,10 +109,12 @@ always @(posedge clk) begin
                 if (if_jump) begin
                   abandon <= 1;
                   flag = 1;
+                  need_ins_pc = next;
                 end
               end else if (output_expanded[6:0] == 7'b1101111) begin
                 next = (instruction_addr + ((output_expanded[31] ? 32'hfff00000 : 0) | (output_expanded[19:12] << 12) | (output_expanded[20] << 11) | (output_expanded[30:21] << 1))) & 32'hfffffffe;
                 abandon <= 1;
+                need_ins_pc = next;
                 flag = 1;
                 program_counter <= next;
               end
@@ -126,10 +133,12 @@ always @(posedge clk) begin
                     instruction_queue[tail][65] = if_jump;
                     if (if_jump) begin
                       abandon <= 1;
+                      need_ins_pc = next;
                     end
                   end else if (output_expanded[6:0] == 7'b1101111) begin
                     next = (instruction_addr + 2'b10 + ((output_expanded[31] ? 32'hfff00000 : 0) | (output_expanded[19:12] << 12) | (output_expanded[20] << 11) | (output_expanded[30:21] << 1))) & 32'hfffffffe;
                     abandon <= 1;
+                    need_ins_pc = next;
                     program_counter <= next;
                   end
                   tail = tail + 1;
@@ -150,10 +159,12 @@ always @(posedge clk) begin
               if (if_jump) begin
                 abandon <= 1;
                 flag = 1;
+                need_ins_pc = next;
               end
             end else if (full_instruction[6:0] == 7'b1101111) begin
               next = (instruction_addr - 2'b10 + ((full_instruction[31] ? 32'hfff00000 : 0) | (full_instruction[19:12] << 12) | (full_instruction[20] << 11) | (full_instruction[30:21] << 1))) & 32'hfffffffe;
               abandon <= 1;
+              need_ins_pc = next;
               program_counter <= next;
               flag = 1;
             end
@@ -172,10 +183,12 @@ always @(posedge clk) begin
                   instruction_queue[tail][65] = if_jump;
                   if (if_jump) begin
                     abandon <= 1;
+                    need_ins_pc = next;
                   end
                 end else if (output_expanded[6:0] == 7'b1101111) begin
                   next = (instruction_addr + 2'b10 + ((output_expanded[31] ? 32'hfff00000 : 0) | (output_expanded[19:12] << 12) | (output_expanded[20] << 11) | (output_expanded[30:21] << 1))) & 32'hfffffffe;
                   abandon <= 1;
+                  need_ins_pc = next;
                   program_counter <= next;
                 end
                 tail = tail + 1;
@@ -183,8 +196,6 @@ always @(posedge clk) begin
               end
             end
           end
-        end else begin
-          abandon <= 0;
         end
       end
       if (need_jump) begin

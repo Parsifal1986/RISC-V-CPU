@@ -65,6 +65,12 @@ reg book;
 
 integer rst_i;
 
+// integer file_handle;
+
+// initial begin
+//   file_handle = $fopen("rob_queue", "w");
+// end
+
 always @(posedge clk) begin
   if (rst) begin
     head = 0;
@@ -141,6 +147,7 @@ always @(posedge clk) begin
         size = 0;
         bp_tag_out <= 0;
         lsb_instruction[5:2] <= 0;
+        rs_instruction[4:0] <= 0;
         stop = 0;
         register_file_write_enable1 = 0;
         register_file_write_enable2 = 0;
@@ -465,6 +472,8 @@ always @(posedge clk) begin
         end
         rob_queue[head][71:70] = 2'b11;
         rob_queue[head][104] = 0;
+        // $fdisplay(file_handle, "excute instruction %h", rob_queue[head][103:72]);
+        // $fdisplay(file_handle, "%t", $time);
         head = head + 1;
         size = size - 1;
       end
