@@ -128,7 +128,7 @@ always @(posedge clk) begin
         tail = tail + 1;
         size = size + 1;
       end
-      if (size < 1) begin
+      if (size < 14) begin
         instruction_ready <= (1 & !stop);
       end else begin
         instruction_ready <= 0;
