@@ -15,8 +15,8 @@ module alu(
   output reg cdb_alu_done
 );
 
-reg [31:0] signed_a;
-reg [31:0] signed_b;
+reg signed [31:0] signed_a;
+reg signed [31:0] signed_b;
 
 always @(posedge clk) begin
   if (rst) begin
@@ -106,7 +106,7 @@ always @(posedge clk) begin
           end
         12:
           begin
-            cdb_alu_data <= signed_a >= signed_b;
+            cdb_alu_data <= (signed_a >= signed_b);
             cdb_alu_tag <= tag;
             cdb_alu_done <= 1;
           end
