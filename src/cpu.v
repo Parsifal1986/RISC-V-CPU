@@ -134,7 +134,7 @@ alu alu_unit(
   .b(alu_b),
   .alu_op(alu_op),
   .tag(alu_tag),
-  // .flush(flush),
+  .flush(flush),
 
   .cdb_alu_data(cdb[31:0]),
   .cdb_alu_tag(cdb[35:32]),
