@@ -287,7 +287,7 @@ begin
         end
         3'b110: begin // C.SW
             expanded_instr = {
-                5'b00000, compressed_instr[6], compressed_instr[12], // Immediate
+                5'b00000, compressed_instr[5], compressed_instr[12], // Immediate
                 2'b01, compressed_instr[4:2], // rs2
                 2'b01, compressed_instr[9:7], // rs1
                 3'b010, // funct3

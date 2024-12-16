@@ -134,7 +134,7 @@ always @(posedge clk) begin
           if (!lsb_queue[i][27] && !lsb_queue[i][22] && !lsb_queue[i][1:0]) begin
             if (ready && !stop) begin
               oprand <= lsb_queue[i][123:92] | (1<<20);
-              addr <= $signed(lsb_queue[head][59:28]) + $signed(lsb_queue[head][17:6]);
+              addr <= $signed(lsb_queue[i][59:28]) + $signed(lsb_queue[i][17:6]);
               lsb_queue[i][1:0] = 2'b01;
               flag = 1;
               stop <= 1;

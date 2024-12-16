@@ -92,6 +92,7 @@ always @(posedge clk) begin
       instruction_data <= 0;
       mem_addr_out <= 0;
       mem_dout <= 0;
+      mem_data <= 0;
       flag = 0;
       if (need_instruction || has_next_instruction) begin
         if (!current_reading_instruction_place) begin
