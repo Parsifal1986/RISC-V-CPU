@@ -404,7 +404,7 @@ always @(posedge clk) begin
             // book = 1;
           end else if (current_instruction[6:0] == 23) begin
             rob_queue[i][71:70] <= 2'b10;
-            rob_queue[i][64:33] = current_instruction[31:12] << 12 + rob_queue[i][32:1];
+            rob_queue[i][64:33] = $signed(current_instruction[31:12] << 12) + $signed(rob_queue[i][32:1]);
             // book = 1;
           end
           register_file_read_addr1 = rob_queue[i][69:65];
