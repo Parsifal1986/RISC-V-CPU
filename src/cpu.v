@@ -300,7 +300,7 @@ instruction_unit instruction_unit(
   .which_predictor(which_predictor)
 );
 
-always @(*) begin
+always @(negedge clk_in) begin
   flush = rob_instruction_flush;
   need_jump = rob_need_jump_set;
   head_tag = rob_head_tag_set;

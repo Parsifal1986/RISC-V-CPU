@@ -59,7 +59,7 @@ assign read_data2 = {reg_state[read_addr2], registers[read_addr2]};
 
 integer i;
 
-always @(*) begin
+always @(negedge clk) begin
   if (write_enable2) begin
     registers[write_addr2] = write_data2[31:0];
     reg_state[write_addr2] = write_data2[36:32];
