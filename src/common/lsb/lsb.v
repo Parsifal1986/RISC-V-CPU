@@ -25,9 +25,9 @@ module load_store_buffer (
 
 reg [123:0] lsb_queue[15:0];
 
-reg [3:0] head, tail;
+reg [3:0] head, tail, i;
 
-reg [3:0] array_size = 0, i;
+reg [4:0] array_size = 0, k;
 
 integer rst_i;
 
@@ -64,11 +64,12 @@ always @(posedge clk) begin
 
       flag = 0;
       if (ready[1]) begin
-        for (i = head; i != tail && !flag; i = i + 1) begin
+        for (k = 0; k < array_size; k = k + 1) begin : Loop1
+          i = k + head;
           if (lsb_queue[i][1:0] == 2'b01) begin
             lsb_queue[i][91:60] = mem_data;
             lsb_queue[i][1:0] = 2'b10;
-            flag = 1;
+            disable Loop1;
           end
         end
       end
@@ -81,7 +82,8 @@ always @(posedge clk) begin
     end
     begin // WorkDependence
       if (cdb[36]) begin
-        for (i = head; i != tail; i = i + 1) begin
+        for (k = 0; k < array_size; k = k + 1) begin
+          i = k + head;
           if (!lsb_queue[i][1:0]) begin
             if (lsb_queue[i][26:23] == cdb[35:32] && lsb_queue[i][27]) begin
               lsb_queue[i][91:60] = cdb[31:0];
@@ -99,7 +101,8 @@ always @(posedge clk) begin
         // for (i = head; i != tail; i = i + 1) begin
         //   $display("lsb_queue[%d] = %b, its dependency : %d", i, lsb_queue[i], lsb_queue[i][26:23]);
         // end
-        for (i = head; i != tail; i = i + 1) begin
+        for (k = 0; k < 16; k = k + 1) begin
+          i = k + head;
           if (!lsb_queue[i][1:0]) begin
             if (lsb_queue[i][26:23] == cdb[72:69] && lsb_queue[i][27]) begin
               lsb_queue[i][91:60] = cdb[68:37];
@@ -128,16 +131,17 @@ always @(posedge clk) begin
       flag = 0;
       oprand <= 0;
       addr <= 0;
-      for (i = head; i != tail && !flag; i = i + 1) begin
+      for (k = 0; k < array_size && !flag; k = k + 1) begin
         // $display("lsb_queue[%d] = %b, its tag is : %d, its denpendency : %d", i, lsb_queue[i], lsb_queue[i][5:2], lsb_queue[i][21:18]);
+        i = k + head;
         if (!lsb_queue[i][123]) begin
           if (!lsb_queue[i][27] && !lsb_queue[i][22] && !lsb_queue[i][1:0]) begin
             if (ready && !stop) begin
               oprand <= lsb_queue[i][123:92] | (1<<20);
               addr <= $signed(lsb_queue[i][59:28]) + $signed(lsb_queue[i][17:6]);
               lsb_queue[i][1:0] = 2'b01;
-              flag = 1;
               stop <= 1;
+              flag = 1;
             end
           end
         end else begin

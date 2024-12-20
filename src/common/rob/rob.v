@@ -45,7 +45,7 @@ module reorder_buffer(
 );
 
 reg [3:0] head, tail, i;
-reg [31:0] size;
+reg [4:0] size, k;
 
 reg [106:0] rob_queue[15:0]; //if_jump(106), is_half(105), busy : 1(104), instruction : 32(103:72), state : 2(71:70), dest : 5([69:65]), value : 32([64:33]), pc : 32([32:1]), flush : 1([0])
 reg [31:0] current_instruction;
@@ -155,8 +155,8 @@ always @(posedge clk) begin
     end
     begin //WorkDecode
       bp_tag_out <= 0;
-      lsb_instruction <= 0;
-      rs_instruction <= 0;
+      lsb_instruction = 0;
+      rs_instruction = 0;
       book = 0;
       bp_tag_out <= 0;
       bp_jump <= 0;
@@ -167,7 +167,8 @@ always @(posedge clk) begin
       //   $display("rob_queue[%d].instruction = %h", i, rob_queue[i][103:72]);
       // end
       // $display("");
-      for (i = head; i != tail && !book; i = i + 1) begin
+      for (k = 0; k < size && !book; k = k + 1) begin
+        i = k + head;
         current_instruction = rob_queue[i][103:72];
         if (rob_queue[i][104] == 1 && rob_queue[i][71:70] == 0) begin
           if (current_instruction[6:0] == 3 || current_instruction[6:0] == 35) begin

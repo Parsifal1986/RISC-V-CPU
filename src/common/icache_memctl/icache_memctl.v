@@ -48,10 +48,6 @@ reg [34:0] has_sent[1:0];
 reg [33:0] mission [31:0]; // [33] = {is_instruction, is_read, addr}
 reg [4:0] head, tail, array_size;
 
-wire [33:0] mission_head;
-
-assign mission_head = mission[head];
-
 always @(posedge clk) begin
   if (rst) begin
     mem_dout <= 0;
@@ -248,7 +244,7 @@ always @(posedge clk) begin
         current_mem_data = 0;
         has_sent[0] = 0;
         has_sent[1] = 0;
-        for (i = 0; i < 32; i++) begin
+        for (i = 0; i < 32; i = i + 1) begin
           mission [i] = 0;
         end
         head = 0;
