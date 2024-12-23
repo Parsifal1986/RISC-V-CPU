@@ -60,18 +60,6 @@ assign read_data2 = {reg_state[read_addr2], registers[read_addr2]};
 integer i;
 
 always @(negedge clk) begin
-  if (write_enable2) begin
-    registers[write_addr2] = write_data2[31:0];
-    reg_state[write_addr2] = write_data2[36:32];
-  end
-  if (write_enable1) begin
-    reg_state[write_addr1] = write_data1[36:32];
-  end
-  registers[0] = 0;
-  reg_state[0] = 0;
-end
-
-always @(posedge clk) begin
   if (rst) begin
     for (i = 0; i < 32; i = i + 1) begin
       registers[i] = 0;
@@ -79,12 +67,21 @@ always @(posedge clk) begin
     end
   end else if (!rdy) begin
   end else begin
+    if (write_enable2) begin
+      registers[write_addr2] = write_data2[31:0];
+      reg_state[write_addr2] = write_data2[36:32];
+    end
+    if (write_enable1) begin
+      reg_state[write_addr1] = write_data1[36:32];
+    end
     if (flush) begin
       for (i = 0; i < 32; i = i + 1) begin
         reg_state[i] = 0;
       end
     end
   end
+  registers[0] = 0;
+  reg_state[0] = 0;
 end
 
 endmodule

@@ -44,7 +44,7 @@ wire [36:0] register_file_read_data2;
 reg [31:0] pc;
 reg [3:0] head_tag;
 reg need_jump;
-reg flush;
+wire flush;
 
 wire [31:0] alu_a;
 wire [31:0] alu_b;
@@ -106,6 +106,8 @@ wire [31:0] pc_set;
 wire instruction_unit_rob_is_half_instruction;
 
 wire instruction_rob_if_jump;
+
+assign flush = rob_instruction_flush;
 
 register_file rf_unit(
   .clk(clk_in),
@@ -301,7 +303,6 @@ instruction_unit instruction_unit(
 );
 
 always @(negedge clk_in) begin
-  flush = rob_instruction_flush;
   need_jump = rob_need_jump_set;
   head_tag = rob_head_tag_set;
   pc = pc_set;

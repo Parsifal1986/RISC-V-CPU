@@ -45,7 +45,7 @@ module reorder_buffer(
 );
 
 reg [3:0] head, tail, i;
-reg [4:0] size, k;
+reg [3:0] size, k;
 
 reg [106:0] rob_queue[15:0]; //if_jump(106), is_half(105), busy : 1(104), instruction : 32(103:72), state : 2(71:70), dest : 5([69:65]), value : 32([64:33]), pc : 32([32:1]), flush : 1([0])
 reg [31:0] current_instruction;
@@ -80,9 +80,12 @@ always @(posedge clk) begin
     head_tag = 0;
     need_jump = 0;
     register_file_read_addr1 = 0;
-    register_file_write_enable1 = 0;
+    register_file_write_enable1 <= 0;
+    register_file_write_enable2 <= 0;
     register_file_write_addr1 = 0;
     register_file_write_data1 = 0;
+    register_file_write_addr2 = 0;
+    register_file_write_data2 = 0;
     instruction_ready = 0;
     instruction_jump_pc = 0;
     rs_instruction = 0;
@@ -149,8 +152,8 @@ always @(posedge clk) begin
         lsb_instruction[5:2] <= 0;
         rs_instruction[4:0] <= 0;
         stop = 0;
-        register_file_write_enable1 = 0;
-        register_file_write_enable2 = 0;
+        register_file_write_enable1 <= 0;
+        register_file_write_enable2 <= 0;
       end
     end
     begin //WorkDecode
