@@ -36,7 +36,7 @@ module reorder_buffer(
   
   output reg [118:0] rs_instruction_out, // busy : 2([118:117]), op : 5([116:112]), vj : 32([110:79]), vk : 32([78:47]), qj : 5([46:42]), qk : 5([41:37]), a : 32(36:5), dest : 5([4:0])
 
-  output reg [123:0] lsb_instruction_out, // complete : 2(1:0), tag : 4(5:2), imm : 12(17:6), rs1 : 5(22:18), rs2 : 5(27:23), addr : 32(59:28), data : 32(91:60), oprand : 32(123:92)
+  output reg [95:0] lsb_instruction_out, // complete : 2(1:0), tag : 4(5:2), imm : 12(17:6), rs1 : 5(22:18), rs2 : 5(27:23), addr : 32(59:28), data : 32(91:60), oprand : 4(95:92)
 
   output reg [3:0] branch_type,
   output reg [3:0] bp_tag_out,
@@ -45,13 +45,13 @@ module reorder_buffer(
 );
 
 reg [3:0] head, tail, i;
-reg [3:0] size, k;
+reg [3:0] size;
 
 reg [106:0] rob_queue[15:0]; //if_jump(106), is_half(105), busy : 1(104), instruction : 32(103:72), state : 2(71:70), dest : 5([69:65]), value : 32([64:33]), pc : 32([32:1]), flush : 1([0])
 reg [31:0] current_instruction;
 
 reg [118:0] rs_instruction;
-reg [123:0] lsb_instruction;
+reg [95:0] lsb_instruction;
 
 wire [106:0] head_element;
 wire [31:0] head_pc;
@@ -63,7 +63,7 @@ reg stop;
 reg wait_signal;
 reg book;
 
-integer rst_i;
+integer rst_i, k;
 
 // integer file_handle;
 
@@ -124,7 +124,7 @@ always @(posedge clk) begin
       end
     end
     begin // WorkEnQueue
-      if (instruction && !stop) begin
+      if (instruction[1:0] && !stop) begin
         rob_queue[tail][106] = instruction_if_jumped;
         rob_queue[tail][105] = is_half_instruction;
         rob_queue[tail][104] = 1;
@@ -137,7 +137,7 @@ always @(posedge clk) begin
         tail = tail + 1;
         size = size + 1;
       end
-      if (size < 14) begin
+      if (size < 12) begin
         instruction_ready <= (1 & !stop);
       end else begin
         instruction_ready <= 0;
@@ -149,278 +149,12 @@ always @(posedge clk) begin
         tail = 0;
         size = 0;
         bp_tag_out <= 0;
-        lsb_instruction[5:2] <= 0;
-        rs_instruction[4:0] <= 0;
+        lsb_instruction[5:2] = 0;
+        rs_instruction[4:0] = 0;
         stop = 0;
         register_file_write_enable1 <= 0;
         register_file_write_enable2 <= 0;
       end
-    end
-    begin //WorkDecode
-      bp_tag_out <= 0;
-      lsb_instruction = 0;
-      rs_instruction = 0;
-      book = 0;
-      bp_tag_out <= 0;
-      bp_jump <= 0;
-      bp_has_predict <= 0;
-      // for (i = head; i != tail; i = i + 1) begin
-      //   $display("rob_queue[%d].state = %d", i, rob_queue[i][71:70]);
-      //   $display("rob_queue[%d].addr = %h", i, rob_queue[i][32:1]);
-      //   $display("rob_queue[%d].instruction = %h", i, rob_queue[i][103:72]);
-      // end
-      // $display("");
-      for (k = 0; k < size && !book; k = k + 1) begin
-        i = k + head;
-        current_instruction = rob_queue[i][103:72];
-        if (rob_queue[i][104] == 1 && rob_queue[i][71:70] == 0) begin
-          if (current_instruction[6:0] == 3 || current_instruction[6:0] == 35) begin
-            if (ls_ready) begin
-              lsb_instruction[5:2] = i;
-              case (current_instruction[6:0])
-                3:  begin
-                  lsb_instruction[123:92] = current_instruction[14:12];
-                  register_file_read_addr1 = current_instruction[19:15];
-                  if (register_file_read_data1[36:32]) begin
-                    if (rob_queue[register_file_read_data1[35:32]][71:70] == 2'b10) begin
-                      lsb_instruction[59:28] = rob_queue[register_file_read_data1[35:32]][64:33];
-                    end else begin
-                      lsb_instruction[22:18] = {1'b1, register_file_read_data1[35:32]};
-                    end
-                  end else begin
-                    lsb_instruction[59:28] = register_file_read_data1[31:0];
-                  end
-                  lsb_instruction[17:6] = current_instruction[31:20];
-                end
-                35: begin
-                  lsb_instruction[123:92] = current_instruction[14:12] | 32'h80000000;
-                  register_file_read_addr1 = current_instruction[19:15];
-                  if (register_file_read_data1[36:32]) begin
-                    if (rob_queue[register_file_read_data1[35:32]][71:70] == 2'b10) begin
-                      lsb_instruction[59:28] = rob_queue[register_file_read_data1[35:32]][64:33];
-                    end else begin
-                      lsb_instruction[22:18] = {1'b1, register_file_read_data1[35:32]};
-                    end
-                  end else begin
-                    lsb_instruction[59:28] = register_file_read_data1[31:0];
-                  end
-                  register_file_read_addr1 = current_instruction[24:20];
-                  if (register_file_read_data1[36:32]) begin
-                    if (rob_queue[register_file_read_data1[35:32]][71:70] == 2'b10) begin
-                      lsb_instruction[91:60] = rob_queue[register_file_read_data1[35:32]][64:33];
-                    end else begin
-                      lsb_instruction[27:23] = {1'b1, register_file_read_data1[35:32]};
-                    end
-                  end else begin
-                    lsb_instruction[91:60] = register_file_read_data1[31:0];
-                  end
-                  lsb_instruction[17:6] = {current_instruction[31:25], current_instruction[11:7]};
-                end
-              endcase
-              rob_queue[i][71:70] = 2'b01;
-              book = 1;
-            end
-          end else if (current_instruction[6:0] == 19 || current_instruction[6:0] == 51 ||
-                      current_instruction[6:0] == 99 || current_instruction[6:0] == 103) begin
-            if (alu_ready) begin
-              case (current_instruction[6:0])
-                19: begin
-                  case (current_instruction[14:12])
-                    3'b000: begin
-                      rs_instruction[116:112] = 0;
-                    end
-                    3'b111: begin
-                      rs_instruction[116:112] = 2;
-                    end
-                    3'b110: begin
-                      rs_instruction[116:112] = 3;
-                    end
-                    3'b100: begin
-                      rs_instruction[116:112] = 4;
-                    end
-                    3'b001: begin
-                      rs_instruction[116:112] = 5;
-                    end
-                    3'b101: begin
-                      rs_instruction[116:112] = 6;
-                    end
-                    3'b010: begin
-                      rs_instruction[116:112] = 8;
-                    end
-                    3'b011: begin
-                      rs_instruction[116:112] = 9;
-                    end
-                  endcase
-                  if (current_instruction[14:12] == 3'b001 || current_instruction[14:12] == 3'b101) begin
-                    if (current_instruction[31:25]) begin
-                      rs_instruction[116:112] = 7;
-                    end
-                    rs_instruction[78:47] = current_instruction[24:20];
-                  end else begin
-                    rs_instruction[78:47] = $signed(current_instruction[31:20]);
-                  end
-                  register_file_read_addr1 = current_instruction[19:15];
-                  if (register_file_read_data1[36:32]) begin
-                    if (rob_queue[register_file_read_data1[35:32]][71:70] == 2'b10) begin
-                      rs_instruction[110:79] = rob_queue[register_file_read_data1[35:32]][64:33];
-                    end else begin
-                      rs_instruction[46:42] = {1'b1, register_file_read_data1[35:32]};
-                    end
-                  end else begin
-                    rs_instruction[110:79] = register_file_read_data1[31:0];
-                  end
-                end
-                51: begin
-                  case (current_instruction[14:12]) 
-                    3'b000: begin
-                      if (current_instruction[31:25]) begin
-                        rs_instruction[116:112] = 1;
-                      end else begin
-                        rs_instruction[116:112] = 0;
-                      end
-                    end
-                    3'b111: begin
-                      rs_instruction[116:112] = 2;
-                    end
-                    3'b110: begin
-                      rs_instruction[116:112] = 3;
-                    end
-                    3'b100: begin
-                      rs_instruction[116:112] = 4;
-                    end
-                    3'b001: begin
-                      rs_instruction[116:112] = 5;
-                    end
-                    3'b101: begin
-                      if (current_instruction[31:25]) begin
-                        rs_instruction[116:112] = 7;
-                      end else begin
-                        rs_instruction[116:112] = 6;
-                      end
-                    end
-                    3'b010: begin
-                      rs_instruction[116:112] = 8;
-                    end
-                    3'b011: begin
-                      rs_instruction[116:112] = 9;
-                    end 
-                  endcase
-                  register_file_read_addr1 = current_instruction[19:15];
-                  if (register_file_read_data1[36:32]) begin
-                    if (rob_queue[register_file_read_data1[35:32]][71:70] == 2'b10) begin
-                      rs_instruction[110:79] = rob_queue[register_file_read_data1[35:32]][64:33];
-                    end else begin
-                      rs_instruction[46:42] = {1'b1, register_file_read_data1[35:32]};
-                    end
-                  end else begin
-                    rs_instruction[110:79] = register_file_read_data1[31:0];
-                  end
-                  register_file_read_addr1 = current_instruction[24:20];
-                  if (register_file_read_data1[36:32]) begin
-                    if (rob_queue[register_file_read_data1[35:32]][71:70] == 2'b10) begin
-                      rs_instruction[78:47] = rob_queue[register_file_read_data1[35:32]][64:33];
-                    end else begin
-                      rs_instruction[41:37] = {1'b1, register_file_read_data1[35:32]};
-                    end
-                  end else begin
-                    rs_instruction[78:47] = register_file_read_data1[31:0];
-                  end
-                end
-                99: begin
-                  case (current_instruction[14:12])
-                    3'b000: begin
-                      rs_instruction[116:112] = 10;
-                    end 
-                    3'b001: begin
-                      rs_instruction[116:112] = 11;
-                    end
-                    3'b101: begin
-                      rs_instruction[116:112] = 12;
-                    end
-                    3'b111: begin
-                      rs_instruction[116:112] = 13;
-                    end
-                    3'b100: begin
-                      rs_instruction[116:112] = 14;
-                    end
-                    3'b110: begin
-                      rs_instruction[116:112] = 15;
-                    end
-                  endcase
-                  register_file_read_addr1 = current_instruction[19:15];
-                  if (register_file_read_data1[36:32]) begin
-                    if (rob_queue[register_file_read_data1[35:32]][71:70] == 2'b10) begin
-                      rs_instruction[110:79] = rob_queue[register_file_read_data1[35:32]][64:33];
-                    end else begin
-                      rs_instruction[46:42] = {1'b1, register_file_read_data1[35:32]};
-                    end
-                  end else begin
-                    rs_instruction[110:79] = register_file_read_data1[31:0];
-                  end
-                  register_file_read_addr1 = current_instruction[24:20];
-                  if (register_file_read_data1[36:32]) begin
-                    if (rob_queue[register_file_read_data1[35:32]][71:70] == 2'b10) begin
-                      rs_instruction[78:47] = rob_queue[register_file_read_data1[35:32]][64:33];
-                    end else begin
-                      rs_instruction[41:37] = {1'b1, register_file_read_data1[35:32]};
-                    end
-                  end else begin
-                    rs_instruction[78:47] = register_file_read_data1[31:0];
-                  end
-                  bp_tag_out <= i;
-                  branch_type <= current_instruction[14:12];
-                  bp_jump <= rob_queue[i][106];
-                  bp_has_predict <= 1;
-                end
-                // 103: begin
-                //   rs_instruction[116:112] = 0;
-                //   register_file_read_addr1 = current_instruction[19:15];
-                //   if (register_file_read_data1[36:32]) begin
-                //     if (rob_queue[register_file_read_data1[35:32]][71:70] == 2'b10) begin
-                //       rs_instruction[110:79] = rob_queue[register_file_read_data1[35:32]][64:33];
-                //     end else begin
-                //       rs_instruction[46:42] = {1'b1, register_file_read_data1[35:32]};
-                //     end
-                //   end else begin
-                //     rs_instruction[110:79] = register_file_read_data1[31:0];
-                //   end
-                //   rs_instruction[78:47] = current_instruction[31:20];
-                //   stop = 1;
-                // end
-              endcase
-              rs_instruction[4:0] = i;
-              rs_instruction[118:117] = 2'b01;
-              rob_queue[i][71:70] = 2'b01;
-              book = 1;
-            end
-          end else if (current_instruction[6:0] == 103) begin
-            rob_queue[i][71:70] <= 2'b10;
-            rob_queue[i][64:33] = rob_queue[i][32:1] + (3'b100 >> rob_queue[i][105]);
-            stop = 1;
-            // book = 1;
-          end else if (current_instruction[6:0] == 111) begin
-            rob_queue[i][71:70] <= 2'b10;
-            rob_queue[i][64:33] = rob_queue[i][32:1] + (3'b100 >> rob_queue[i][105]);
-            // book = 1;
-          end else if (current_instruction[6:0] == 55) begin
-            rob_queue[i][71:70] <= 2'b10;
-            rob_queue[i][64:33] = current_instruction[31:12] << 12;
-            // book = 1;
-          end else if (current_instruction[6:0] == 23) begin
-            rob_queue[i][71:70] <= 2'b10;
-            rob_queue[i][64:33] = $signed(current_instruction[31:12] << 12) + $signed(rob_queue[i][32:1]);
-            // book = 1;
-          end
-          register_file_read_addr1 = rob_queue[i][69:65];
-          if (current_instruction[6:0] != 7'b0100011 && current_instruction[6:0] != 7'b1100011) begin
-            register_file_write_addr1 <= rob_queue[i][69:65];
-            register_file_write_data1 <= {1'b1, i, register_file_read_data1[31:0]};
-            register_file_write_enable1 <= 1;
-          end
-        end
-      end
-      lsb_instruction_out <= lsb_instruction;
-      rs_instruction_out <= rs_instruction;
     end
     begin // WorkDeQueue
       flush_output <= 0;
@@ -459,9 +193,8 @@ always @(posedge clk) begin
           if (!wait_signal) begin
             wait_signal = 1;
             disable DeQueue;
-          end else begin
-            wait_signal = 0;
           end
+          wait_signal = 0;
           if (rob_queue[head][0]) begin
             flush_output <= 1;
             if (!rob_queue[head][106]) begin
@@ -481,6 +214,521 @@ always @(posedge clk) begin
         head = head + 1;
         size = size - 1;
       end
+    end
+    begin //WorkDecode
+      bp_tag_out <= 0;
+      lsb_instruction = 0;
+      rs_instruction = 0;
+      book = 0;
+      bp_tag_out <= 0;
+      bp_jump <= 0;
+      bp_has_predict <= 0;
+      // for (i = head; i != tail; i = i + 1) begin
+      //   $display("rob_queue[%d].state = %d", i, rob_queue[i][71:70]);
+      //   $display("rob_queue[%d].addr = %h", i, rob_queue[i][32:1]);
+      //   $display("rob_queue[%d].instruction = %h", i, rob_queue[i][103:72]);
+      // end
+      // $display("");
+      // for (k = 0; k < 16; k = k + 1) begin
+      //   if (k < size && !book) begin
+          // i = k + head;
+      if (size) begin
+        i = tail - 1;
+        current_instruction = rob_queue[i][103:72];
+        if (rob_queue[i][104] == 1 && rob_queue[i][71:70] == 0) begin
+          case (current_instruction[6:0])
+            3:  begin
+              lsb_instruction[95:92] = current_instruction[14:12];
+              lsb_instruction[5:2] = i;
+              lsb_instruction[1:0] = 2'b01;
+              rob_queue[i][71:70] = 2'b01;
+              register_file_read_addr1 = current_instruction[19:15];
+              if (register_file_read_data1[36]) begin
+                if (rob_queue[register_file_read_data1[35:32]][71]) begin
+                  lsb_instruction[59:28] = rob_queue[register_file_read_data1[35:32]][64:33];
+                end else begin
+                  lsb_instruction[22:18] = {1'b1, register_file_read_data1[35:32]};
+                end
+              end else begin
+                lsb_instruction[59:28] = register_file_read_data1[31:0];
+              end
+              lsb_instruction[17:6] = current_instruction[31:20];
+            end
+            35: begin
+              lsb_instruction[95:92] = {1'b1, current_instruction[14:12]};
+              lsb_instruction[5:2] = i;
+              lsb_instruction[1:0] = 2'b01;
+              rob_queue[i][71:70] = 2'b01;
+              register_file_read_addr1 = current_instruction[19:15];
+              if (register_file_read_data1[36]) begin
+                if (rob_queue[register_file_read_data1[35:32]][71]) begin
+                  lsb_instruction[59:28] = rob_queue[register_file_read_data1[35:32]][64:33];
+                end else begin
+                  lsb_instruction[22:18] = {1'b1, register_file_read_data1[35:32]};
+                end
+              end else begin
+                lsb_instruction[59:28] = register_file_read_data1[31:0];
+              end
+              register_file_read_addr1 = current_instruction[24:20];
+              if (register_file_read_data1[36]) begin
+                if (rob_queue[register_file_read_data1[35:32]][71]) begin
+                  lsb_instruction[91:60] = rob_queue[register_file_read_data1[35:32]][64:33];
+                end else begin
+                  lsb_instruction[27:23] = {1'b1, register_file_read_data1[35:32]};
+                end
+              end else begin
+                lsb_instruction[91:60] = register_file_read_data1[31:0];
+              end
+              lsb_instruction[17:6] = {current_instruction[31:25], current_instruction[11:7]};
+            end
+            19: begin
+              rs_instruction[4:0] = i;
+              rs_instruction[78:47] = $signed(current_instruction[31:20]);
+              rs_instruction[118:117] = 2'b01;
+              rob_queue[i][71:70] = 2'b01;
+              case (current_instruction[14:12])
+                3'b000: begin
+                  rs_instruction[116:112] = 0;
+                end
+                3'b111: begin
+                  rs_instruction[116:112] = 2;
+                end
+                3'b110: begin
+                  rs_instruction[116:112] = 3;
+                end
+                3'b100: begin
+                  rs_instruction[116:112] = 4;
+                end
+                3'b001: begin
+                  rs_instruction[116:112] = 5;
+                  rs_instruction[78:47] = current_instruction[24:20];
+                end
+                3'b101: begin
+                  rs_instruction[116:112] = 6;
+                  if (current_instruction[31:25]) begin
+                    rs_instruction[116:112] = 7;
+                  end
+                  rs_instruction[78:47] = current_instruction[24:20];
+                end
+                3'b010: begin
+                  rs_instruction[116:112] = 8;
+                end
+                3'b011: begin
+                  rs_instruction[116:112] = 9;
+                end
+                default: begin
+                  $display("Error : rs_instruction");
+                end
+              endcase
+              register_file_read_addr1 = current_instruction[19:15];
+              if (register_file_read_data1[36]) begin
+                if (rob_queue[register_file_read_data1[35:32]][71]) begin
+                  rs_instruction[110:79] = rob_queue[register_file_read_data1[35:32]][64:33];
+                end else begin
+                  rs_instruction[46:42] = {1'b1, register_file_read_data1[35:32]};
+                end
+              end else begin
+                rs_instruction[110:79] = register_file_read_data1[31:0];
+              end
+            end
+            51: begin
+              rs_instruction[4:0] = i;
+              rs_instruction[118:117] = 2'b01;
+              rob_queue[i][71:70] = 2'b01;
+              case (current_instruction[14:12]) 
+                3'b000: begin
+                  if (current_instruction[31:25]) begin
+                    rs_instruction[116:112] = 1;
+                  end else begin
+                    rs_instruction[116:112] = 0;
+                  end
+                end
+                3'b111: begin
+                  rs_instruction[116:112] = 2;
+                end
+                3'b110: begin
+                  rs_instruction[116:112] = 3;
+                end
+                3'b100: begin
+                  rs_instruction[116:112] = 4;
+                end
+                3'b001: begin
+                  rs_instruction[116:112] = 5;
+                end
+                3'b101: begin
+                  if (current_instruction[31:25]) begin
+                    rs_instruction[116:112] = 7;
+                  end else begin
+                    rs_instruction[116:112] = 6;
+                  end
+                end
+                3'b010: begin
+                  rs_instruction[116:112] = 8;
+                end
+                3'b011: begin
+                  rs_instruction[116:112] = 9;
+                end
+                default: begin
+                  $display("Error : rs_instruction");
+                end
+              endcase
+              register_file_read_addr1 = current_instruction[19:15];
+              if (register_file_read_data1[36]) begin
+                if (rob_queue[register_file_read_data1[35:32]][71]) begin
+                  rs_instruction[110:79] = rob_queue[register_file_read_data1[35:32]][64:33];
+                end else begin
+                  rs_instruction[46:42] = {1'b1, register_file_read_data1[35:32]};
+                end
+              end else begin
+                rs_instruction[110:79] = register_file_read_data1[31:0];
+              end
+              register_file_read_addr1 = current_instruction[24:20];
+              if (register_file_read_data1[36]) begin
+                if (rob_queue[register_file_read_data1[35:32]][71]) begin
+                  rs_instruction[78:47] = rob_queue[register_file_read_data1[35:32]][64:33];
+                end else begin
+                  rs_instruction[41:37] = {1'b1, register_file_read_data1[35:32]};
+                end
+              end else begin
+                rs_instruction[78:47] = register_file_read_data1[31:0];
+              end
+            end
+            99: begin
+              rs_instruction[4:0] = i;
+              rs_instruction[118:117] = 2'b01;
+              rob_queue[i][71:70] = 2'b01;
+              case (current_instruction[14:12])
+                3'b000: begin
+                  rs_instruction[116:112] = 10;
+                end 
+                3'b001: begin
+                  rs_instruction[116:112] = 11;
+                end
+                3'b101: begin
+                  rs_instruction[116:112] = 12;
+                end
+                3'b111: begin
+                  rs_instruction[116:112] = 13;
+                end
+                3'b100: begin
+                  rs_instruction[116:112] = 14;
+                end
+                3'b110: begin
+                  rs_instruction[116:112] = 15;
+                end
+                default: begin
+                  $display("Error : rs_instruction");
+                end
+              endcase
+              register_file_read_addr1 = current_instruction[19:15];
+              if (register_file_read_data1[36]) begin
+                if (rob_queue[register_file_read_data1[35:32]][71]) begin
+                  rs_instruction[110:79] = rob_queue[register_file_read_data1[35:32]][64:33];
+                end else begin
+                  rs_instruction[46:42] = {1'b1, register_file_read_data1[35:32]};
+                end
+              end else begin
+                rs_instruction[110:79] = register_file_read_data1[31:0];
+              end
+              register_file_read_addr1 = current_instruction[24:20];
+              if (register_file_read_data1[36]) begin
+                if (rob_queue[register_file_read_data1[35:32]][71]) begin
+                  rs_instruction[78:47] = rob_queue[register_file_read_data1[35:32]][64:33];
+                end else begin
+                  rs_instruction[41:37] = {1'b1, register_file_read_data1[35:32]};
+                end
+              end else begin
+                rs_instruction[78:47] = register_file_read_data1[31:0];
+              end
+              bp_tag_out <= i;
+              branch_type <= current_instruction[14:12];
+              bp_jump <= rob_queue[i][106];
+              bp_has_predict <= 1;
+            end
+            103: begin
+              rob_queue[i][71:70] = 2'b10;
+              rob_queue[i][64:33] = rob_queue[i][32:1] + (3'b100 >> rob_queue[i][105]);
+              stop = 1;
+            end
+            111: begin
+              rob_queue[i][71:70] = 2'b10;
+              rob_queue[i][64:33] = rob_queue[i][32:1] + (3'b100 >> rob_queue[i][105]);
+            end
+            55: begin
+              rob_queue[i][71:70] = 2'b10;
+              rob_queue[i][64:33] = current_instruction[31:12] << 12;
+            end
+            23: begin
+              rob_queue[i][71:70] = 2'b10;
+              rob_queue[i][64:33] = $signed(current_instruction[31:12] << 12) + $signed(rob_queue[i][32:1]);
+            end
+            default: begin
+              $display("Error : Wrong Ins");
+            end
+          endcase
+          // if (current_instruction[6:0] == 3 || current_instruction[6:0] == 35) begin
+            // if (ls_ready) begin
+            //   lsb_instruction[5:2] = i;
+            //   lsb_instruction[1:0] = 2'b01;
+            //   case (current_instruction[6:0])
+            //     3:  begin
+            //       lsb_instruction[95:92] = current_instruction[14:12];
+            //       register_file_read_addr1 = current_instruction[19:15];
+            //       if (register_file_read_data1[36]) begin
+            //         if (rob_queue[register_file_read_data1[35:32]][71]) begin
+            //           lsb_instruction[59:28] = rob_queue[register_file_read_data1[35:32]][64:33];
+            //         end else begin
+            //           lsb_instruction[22:18] = {1'b1, register_file_read_data1[35:32]};
+            //         end
+            //       end else begin
+            //         lsb_instruction[59:28] = register_file_read_data1[31:0];
+            //       end
+            //       lsb_instruction[17:6] = current_instruction[31:20];
+            //     end
+            //     35: begin
+            //       lsb_instruction[95:92] = {1'b1, current_instruction[14:12]};
+            //       register_file_read_addr1 = current_instruction[19:15];
+            //       if (register_file_read_data1[36]) begin
+            //         if (rob_queue[register_file_read_data1[35:32]][71]) begin
+            //           lsb_instruction[59:28] = rob_queue[register_file_read_data1[35:32]][64:33];
+            //         end else begin
+            //           lsb_instruction[22:18] = {1'b1, register_file_read_data1[35:32]};
+            //         end
+            //       end else begin
+            //         lsb_instruction[59:28] = register_file_read_data1[31:0];
+            //       end
+            //       register_file_read_addr1 = current_instruction[24:20];
+            //       if (register_file_read_data1[36]) begin
+            //         if (rob_queue[register_file_read_data1[35:32]][71]) begin
+            //           lsb_instruction[91:60] = rob_queue[register_file_read_data1[35:32]][64:33];
+            //         end else begin
+            //           lsb_instruction[27:23] = {1'b1, register_file_read_data1[35:32]};
+            //         end
+            //       end else begin
+            //         lsb_instruction[91:60] = register_file_read_data1[31:0];
+            //       end
+            //       lsb_instruction[17:6] = {current_instruction[31:25], current_instruction[11:7]};
+            //     end
+            //     default: begin
+            //       $display("Error : lsb_instruction");
+            //     end
+            //   endcase
+            //   rob_queue[i][71:70] = 2'b01;
+            //   book = 1;
+            // end
+          // end else if (current_instruction[6:0] == 19 || current_instruction[6:0] == 51 ||
+          //             current_instruction[6:0] == 99) begin
+          //   if (alu_ready) begin
+          //     case (current_instruction[6:0])
+          //       19: begin
+          //         rs_instruction[78:47] = $signed(current_instruction[31:20]);
+          //         case (current_instruction[14:12])
+          //           3'b000: begin
+          //             rs_instruction[116:112] = 0;
+          //           end
+          //           3'b111: begin
+          //             rs_instruction[116:112] = 2;
+          //           end
+          //           3'b110: begin
+          //             rs_instruction[116:112] = 3;
+          //           end
+          //           3'b100: begin
+          //             rs_instruction[116:112] = 4;
+          //           end
+          //           3'b001: begin
+          //             rs_instruction[116:112] = 5;
+          //             rs_instruction[78:47] = current_instruction[24:20];
+          //           end
+          //           3'b101: begin
+          //             rs_instruction[116:112] = 6;
+          //             if (current_instruction[31:25]) begin
+          //               rs_instruction[116:112] = 7;
+          //             end
+          //             rs_instruction[78:47] = current_instruction[24:20];
+          //           end
+          //           3'b010: begin
+          //             rs_instruction[116:112] = 8;
+          //           end
+          //           3'b011: begin
+          //             rs_instruction[116:112] = 9;
+          //           end
+          //           default: begin
+          //             $display("Error : rs_instruction");
+          //           end
+          //         endcase
+          //         register_file_read_addr1 = current_instruction[19:15];
+          //         if (register_file_read_data1[36]) begin
+          //           if (rob_queue[register_file_read_data1[35:32]][71]) begin
+          //             rs_instruction[110:79] = rob_queue[register_file_read_data1[35:32]][64:33];
+          //           end else begin
+          //             rs_instruction[46:42] = {1'b1, register_file_read_data1[35:32]};
+          //           end
+          //         end else begin
+          //           rs_instruction[110:79] = register_file_read_data1[31:0];
+          //         end
+          //       end
+          //       51: begin
+          //         case (current_instruction[14:12]) 
+          //           3'b000: begin
+          //             if (current_instruction[31:25]) begin
+          //               rs_instruction[116:112] = 1;
+          //             end else begin
+          //               rs_instruction[116:112] = 0;
+          //             end
+          //           end
+          //           3'b111: begin
+          //             rs_instruction[116:112] = 2;
+          //           end
+          //           3'b110: begin
+          //             rs_instruction[116:112] = 3;
+          //           end
+          //           3'b100: begin
+          //             rs_instruction[116:112] = 4;
+          //           end
+          //           3'b001: begin
+          //             rs_instruction[116:112] = 5;
+          //           end
+          //           3'b101: begin
+          //             if (current_instruction[31:25]) begin
+          //               rs_instruction[116:112] = 7;
+          //             end else begin
+          //               rs_instruction[116:112] = 6;
+          //             end
+          //           end
+          //           3'b010: begin
+          //             rs_instruction[116:112] = 8;
+          //           end
+          //           3'b011: begin
+          //             rs_instruction[116:112] = 9;
+          //           end
+          //           default: begin
+          //             $display("Error : rs_instruction");
+          //           end
+          //         endcase
+          //         register_file_read_addr1 = current_instruction[19:15];
+          //         if (register_file_read_data1[36]) begin
+          //           if (rob_queue[register_file_read_data1[35:32]][71]) begin
+          //             rs_instruction[110:79] = rob_queue[register_file_read_data1[35:32]][64:33];
+          //           end else begin
+          //             rs_instruction[46:42] = {1'b1, register_file_read_data1[35:32]};
+          //           end
+          //         end else begin
+          //           rs_instruction[110:79] = register_file_read_data1[31:0];
+          //         end
+          //         register_file_read_addr1 = current_instruction[24:20];
+          //         if (register_file_read_data1[36]) begin
+          //           if (rob_queue[register_file_read_data1[35:32]][71]) begin
+          //             rs_instruction[78:47] = rob_queue[register_file_read_data1[35:32]][64:33];
+          //           end else begin
+          //             rs_instruction[41:37] = {1'b1, register_file_read_data1[35:32]};
+          //           end
+          //         end else begin
+          //           rs_instruction[78:47] = register_file_read_data1[31:0];
+          //         end
+          //       end
+          //       99: begin
+          //         case (current_instruction[14:12])
+          //           3'b000: begin
+          //             rs_instruction[116:112] = 10;
+          //           end 
+          //           3'b001: begin
+          //             rs_instruction[116:112] = 11;
+          //           end
+          //           3'b101: begin
+          //             rs_instruction[116:112] = 12;
+          //           end
+          //           3'b111: begin
+          //             rs_instruction[116:112] = 13;
+          //           end
+          //           3'b100: begin
+          //             rs_instruction[116:112] = 14;
+          //           end
+          //           3'b110: begin
+          //             rs_instruction[116:112] = 15;
+          //           end
+          //           default: begin
+          //             $display("Error : rs_instruction");
+          //           end
+          //         endcase
+          //         register_file_read_addr1 = current_instruction[19:15];
+          //         if (register_file_read_data1[36]) begin
+          //           if (rob_queue[register_file_read_data1[35:32]][71]) begin
+          //             rs_instruction[110:79] = rob_queue[register_file_read_data1[35:32]][64:33];
+          //           end else begin
+          //             rs_instruction[46:42] = {1'b1, register_file_read_data1[35:32]};
+          //           end
+          //         end else begin
+          //           rs_instruction[110:79] = register_file_read_data1[31:0];
+          //         end
+          //         register_file_read_addr1 = current_instruction[24:20];
+          //         if (register_file_read_data1[36]) begin
+          //           if (rob_queue[register_file_read_data1[35:32]][71]) begin
+          //             rs_instruction[78:47] = rob_queue[register_file_read_data1[35:32]][64:33];
+          //           end else begin
+          //             rs_instruction[41:37] = {1'b1, register_file_read_data1[35:32]};
+          //           end
+          //         end else begin
+          //           rs_instruction[78:47] = register_file_read_data1[31:0];
+          //         end
+          //         bp_tag_out <= i;
+          //         branch_type <= current_instruction[14:12];
+          //         bp_jump <= rob_queue[i][106];
+          //         bp_has_predict <= 1;
+          //       end
+          //       default: begin
+          //         $display("Error : rs_instruction");
+          //       end
+          //       // 103: begin
+          //       //   rs_instruction[116:112] = 0;
+          //       //   register_file_read_addr1 = current_instruction[19:15];
+          //       //   if (register_file_read_data1[36]) begin
+          //       //     if (rob_queue[register_file_read_data1[35:32]][71:70] == 2'b10) begin
+          //       //       rs_instruction[110:79] = rob_queue[register_file_read_data1[35:32]][64:33];
+          //       //     end else begin
+          //       //       rs_instruction[46:42] = {1'b1, register_file_read_data1[35:32]};
+          //       //     end
+          //       //   end else begin
+          //       //     rs_instruction[110:79] = register_file_read_data1[31:0];
+          //       //   end
+          //       //   rs_instruction[78:47] = current_instruction[31:20];
+          //       //   stop = 1;
+          //       // end
+          //     endcase
+          //     rs_instruction[4:0] = i;
+          //     rs_instruction[118:117] = 2'b01;
+          //     rob_queue[i][71:70] = 2'b01;
+          //     book = 1;
+          //   end
+          // end else if (current_instruction[6:0] == 103) begin
+          //   rob_queue[i][71:70] = 2'b10;
+          //   rob_queue[i][64:33] = rob_queue[i][32:1] + (3'b100 >> rob_queue[i][105]);
+          //   stop = 1;
+          //   // book = 1;
+          // end else if (current_instruction[6:0] == 111) begin
+          //   rob_queue[i][71:70] = 2'b10;
+          //   rob_queue[i][64:33] = rob_queue[i][32:1] + (3'b100 >> rob_queue[i][105]);
+          //   // book = 1;
+          // end else if (current_instruction[6:0] == 55) begin
+          //   rob_queue[i][71:70] = 2'b10;
+          //   rob_queue[i][64:33] = current_instruction[31:12] << 12;
+          //   // book = 1;
+          // end else if (current_instruction[6:0] == 23) begin
+          //   rob_queue[i][71:70] = 2'b10;
+          //   rob_queue[i][64:33] = $signed(current_instruction[31:12] << 12) + $signed(rob_queue[i][32:1]);
+          //   // book = 1;
+          // end
+          register_file_read_addr1 = rob_queue[i][69:65];
+          if (current_instruction[6:0] != 7'b0100011 && current_instruction[6:0] != 7'b1100011) begin
+            register_file_write_addr1 <= rob_queue[i][69:65];
+            register_file_write_data1 <= {1'b1, i, register_file_read_data1[31:0]};
+            register_file_write_enable1 <= 1;
+          end
+        end
+      end
+        // end
+      // end
+      lsb_instruction_out <= lsb_instruction;
+      rs_instruction_out <= rs_instruction;
     end
   end
 end

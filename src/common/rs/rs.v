@@ -16,9 +16,12 @@ module reservation_station(
 );
 
 reg [31:0] i;
+
 reg [118:0] rs_array[15:0];
+
 reg [3:0] array_size;
-reg flag;
+
+integer flag;
 
 always @(posedge clk) begin
   if (rst) begin
@@ -34,37 +37,34 @@ always @(posedge clk) begin
   end else if (!rdy) begin
   end else begin
     begin // WorkInstruction
-      flag = 0;
+      flag = 16;
       if (rs_instruction) begin
-        for (i = 0; i < 16 && !flag; i = i + 1) begin
+        for (i = 0; i < 16; i = i + 1) begin
           if (!rs_array[i][118:117]) begin
-            rs_array[i] = rs_instruction;
-            array_size = array_size + 1;
-            flag = 1;
+            flag = i;
           end
+        end
+        if (flag != 16) begin
+          rs_array[flag] = rs_instruction;
+          array_size = array_size + 1;
         end
       end
     end
     begin // WorkArray
-      flag = 0;
+      flag = 16;
       alu_ready <= 0;
-      // for (i = 0; i < 16; i++) begin
-      //   if (rs_array[i][118:117] == 1) begin
-      //     $display("rs_array[%d] = %b", i, rs_array[i]);
-      //   end
-      // end
-      for (i = 0; i < 16 && !flag; i = i + 1) begin
-        if (rs_array[i][118:117] == 1) begin
-          if (!rs_array[i][46] && !rs_array[i][41]) begin
-            alu_ready <= 1;
-            alu_oprand <= rs_array[i][116:112];
-            a <= rs_array[i][110:79];
-            b <= rs_array[i][78:47];
-            alu_tag <= rs_array[i][3:0];
-            rs_array[i][118:117] = 2'b10;
-            flag = 1;
-          end
+      for (i = 0; i < 16; i = i + 1) begin
+        if (rs_array[i][118:117] == 1 && !rs_array[i][46] && !rs_array[i][41]) begin
+          flag = i;
         end
+      end
+      if (flag != 16) begin
+        alu_ready <= 1;
+        alu_oprand <= rs_array[flag][116:112];
+        a <= rs_array[flag][110:79];
+        b <= rs_array[flag][78:47];
+        alu_tag <= rs_array[flag][3:0];
+        rs_array[flag][118:117] = 2'b10;
       end
       if (array_size < 14) begin
         rs_ready <= 1;
@@ -93,10 +93,8 @@ always @(posedge clk) begin
         end
       end
       if (cdb[73]) begin
-        // $display("cdb[72:69] = %d, cdb[68:37] = %d", cdb[72:69], cdb[68:37]);
         for (i = 0; i < 16; i = i + 1) begin
           if (rs_array[i][118:117]) begin
-            // $display("rs_array[%d].dependency1 = %d, rs_array[%d].dependency2 = %d", i, rs_array[i][45:42], i, rs_array[i][40:37]);
             if (rs_array[i][3:0] == cdb[72:69]) begin
               rs_array[i][36:5] = cdb[68:37];
               rs_array[i][118:117] = 0;

@@ -73,7 +73,7 @@ wire [31:0] rob_instruction_instruction_jump_pc;
 
 wire [118:0] rob_rs_instruction;
 
-wire [123:0] rob_lsb_instruction;
+wire [95:0] rob_lsb_instruction;
 
 wire [3:0] rob_bp_tag_out;
 
@@ -88,7 +88,7 @@ wire [31:0] instruction_unit_icache_addr;
 
 wire [1:0] memctl_lsb_mem_ready;
 
-wire [31:0] lsb_memctl_oprand;
+wire [4:0] lsb_memctl_oprand;
 wire [31:0] lsb_memctl_addr;
 wire [31:0] lsb_memctl_data;
 

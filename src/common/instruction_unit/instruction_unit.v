@@ -27,13 +27,13 @@ module instruction_unit(
   output reg [3:0] which_predictor
 );
 
-reg [65:0] instruction_queue [127:0];
+reg [65:0] instruction_queue [15:0];
 
 reg [15:0] half_instruction;
 
 reg [31:0] full_instruction;
 
-reg [6:0] head, tail;
+reg [3:0] head, tail;
 
 reg [31:0] next;
 
@@ -59,12 +59,12 @@ always @(posedge clk) begin
     ready <= 0;
     program_counter <= 0;
     which_predictor <= 0;
-    for (i = 0; i < 128; i = i + 1) begin
+    for (i = 0; i < 16; i = i + 1) begin
       instruction_queue[i] = 0;
     end
     half_instruction = 0;
     full_instruction = 0;
-    abandon = 0;
+    abandon <= 0;
     head = 0;
     tail = 0;
     next = 0;
@@ -78,46 +78,54 @@ always @(posedge clk) begin
           if (!half_instruction) begin
             if (instruction_data[1:0] == 2'b11) begin
               instruction_queue[tail] = {instruction_data, instruction_addr};
-              if (instruction_data[6:4] == 3'b110) begin
-                if (instruction_data[6:0] == 7'b1100011) begin
+              casez (instruction_data[6:0])
+                7'b1100011: begin
                   which_predictor = instruction_data[14:12];
-                  next = (if_jump ? instruction_addr + ((instruction_data[31] ? 32'hfffff000 : 0) | (instruction_data[7] << 11) | (instruction_data[30:25] << 5) | (instruction_data[11:8] << 1)) : pc) & 32'hfffffffe;
-                  program_counter <= next;
                   instruction_queue[tail][65] = if_jump;
                   if (if_jump) begin
+                    next = instruction_addr + {{20{instruction_data[31]}}, instruction_data[7], instruction_data[30:25], instruction_data[11:8], 1'b0};
                     abandon <= 1;
                     need_ins_pc = next;
+                  end else begin
+                    next = pc;
                   end
-                end else if (instruction_data[6:0] == 7'b1101111) begin
-                  next = (instruction_addr + ((instruction_data[31] ? 32'hfff00000 : 0) | (instruction_data[19:12] << 12) | (instruction_data[20] << 11) | (instruction_data[30:21] << 1))) & 32'hfffffffe;
+                  program_counter <= next;
+                end
+                7'b1101111: begin
+                  next = instruction_addr + {{12{instruction_data[31]}}, instruction_data[19:12], instruction_data[20], instruction_data[30:21], 1'b0};
                   abandon <= 1;
                   program_counter <= next;
                   need_ins_pc = next;
                 end
-              end
+              endcase
               tail = tail + 1;
               array_size = array_size + 1;
             end else begin
               flag = 0;
               RISCVC_To_RISCV(instruction_data[15:0], output_expanded);
               instruction_queue[tail] = {1'b1, output_expanded, instruction_addr};
-              if (output_expanded[6:0] == 7'b1100011) begin
-                which_predictor = output_expanded[14:12];
-                next = (if_jump ? instruction_addr + ((output_expanded[31] ? 32'hfffff000 : 0) | (output_expanded[7] << 11) | (output_expanded[30:25] << 5) | (output_expanded[11:8] << 1)) : pc) & 32'hfffffffe;
-                program_counter <= next;
-                instruction_queue[tail][65] = if_jump;
-                if (if_jump) begin
-                  abandon <= 1;
-                  flag = 1;
-                  need_ins_pc = next;
+              casez (output_expanded[6:0])
+                7'b1100011: begin
+                  which_predictor = output_expanded[14:12];
+                  instruction_queue[tail][65] = if_jump;
+                  if (if_jump) begin
+                    next = instruction_addr + {{20{output_expanded[31]}}, output_expanded[7], output_expanded[30:25], output_expanded[11:8], 1'b0};
+                    abandon <= 1;
+                    flag = 1;
+                    need_ins_pc = next;
+                  end else begin
+                    next = pc;
+                  end
+                  program_counter <= next;
                 end
-              end else if (output_expanded[6:0] == 7'b1101111) begin
-                next = (instruction_addr + ((output_expanded[31] ? 32'hfff00000 : 0) | (output_expanded[19:12] << 12) | (output_expanded[20] << 11) | (output_expanded[30:21] << 1))) & 32'hfffffffe;
-                abandon <= 1;
-                need_ins_pc = next;
-                flag = 1;
-                program_counter <= next;
-              end
+                7'b1101111: begin
+                  next = instruction_addr + {{12{output_expanded[31]}}, output_expanded[19:12], output_expanded[20], output_expanded[30:21], 1'b0};
+                  abandon <= 1;
+                  need_ins_pc = next;
+                  flag = 1;
+                  program_counter <= next;
+                end
+              endcase
               tail = tail + 1;
               array_size = array_size + 1;
               if (!flag) begin
@@ -126,21 +134,26 @@ always @(posedge clk) begin
                 end else begin
                   RISCVC_To_RISCV(instruction_data[31:16], output_expanded);
                   instruction_queue[tail] = {1'b1, output_expanded, instruction_addr + 2'b10};
-                  if (output_expanded[6:0] == 7'b1100011) begin
-                    which_predictor = output_expanded[14:12];
-                    next = (if_jump ? instruction_addr + 2'b10 + ((output_expanded[31] ? 32'hfffff000 : 0) | (output_expanded[7] << 11) | (output_expanded[30:25] << 5) | (output_expanded[11:8] << 1)) : pc) & 32'hfffffffe;
-                    program_counter <= next;
-                    instruction_queue[tail][65] = if_jump;
-                    if (if_jump) begin
+                  casez (output_expanded[6:0])
+                    7'b1100011: begin
+                      which_predictor = output_expanded[14:12];
+                      instruction_queue[tail][65] = if_jump;
+                      if (if_jump) begin
+                        next = instruction_addr + 2'b10 + {{20{output_expanded[31]}}, output_expanded[7], output_expanded[30:25], output_expanded[11:8], 1'b0};
+                        abandon <= 1;
+                        need_ins_pc = next;
+                      end else begin
+                        next = pc;
+                      end
+                      program_counter <= next;
+                    end 
+                    7'b1101111: begin
+                      next = instruction_addr + 2'b10 + {{12{output_expanded[31]}}, output_expanded[19:12], output_expanded[20], output_expanded[30:21], 1'b0};
                       abandon <= 1;
                       need_ins_pc = next;
+                      program_counter <= next;
                     end
-                  end else if (output_expanded[6:0] == 7'b1101111) begin
-                    next = (instruction_addr + 2'b10 + ((output_expanded[31] ? 32'hfff00000 : 0) | (output_expanded[19:12] << 12) | (output_expanded[20] << 11) | (output_expanded[30:21] << 1))) & 32'hfffffffe;
-                    abandon <= 1;
-                    need_ins_pc = next;
-                    program_counter <= next;
-                  end
+                  endcase
                   tail = tail + 1;
                   array_size = array_size + 1;
                 end
@@ -151,23 +164,28 @@ always @(posedge clk) begin
             full_instruction = {instruction_data[15:0], half_instruction};
             instruction_queue[tail] = {full_instruction, instruction_addr - 2'b10};
             half_instruction = 0;
-            if (full_instruction[6:0] == 7'b1100011) begin
-              which_predictor = full_instruction[14:12];
-              next = (if_jump ? instruction_addr - 2'b10 + ((full_instruction[31] ? 32'hfffff000 : 0) | (full_instruction[7] << 11) | (full_instruction[30:25] << 5) | (full_instruction[11:8] << 1)) : pc) & 32'hfffffffe;
-              program_counter <= next;
-              instruction_queue[tail][65] = if_jump;
-              if (if_jump) begin
-                abandon <= 1;
-                flag = 1;
-                need_ins_pc = next;
+            casez (full_instruction[6:0])
+              7'b1100011: begin
+                which_predictor = full_instruction[14:12];
+                instruction_queue[tail][65] = if_jump;
+                if (if_jump) begin
+                  next = instruction_addr - 2'b10 + {{20{full_instruction[31]}}, full_instruction[7], full_instruction[30:25], full_instruction[11:8], 1'b0};
+                  abandon <= 1;
+                  flag = 1;
+                  need_ins_pc = next;
+                end else begin
+                  next = pc;
+                end
+                program_counter <= next;
               end
-            end else if (full_instruction[6:0] == 7'b1101111) begin
-              next = (instruction_addr - 2'b10 + ((full_instruction[31] ? 32'hfff00000 : 0) | (full_instruction[19:12] << 12) | (full_instruction[20] << 11) | (full_instruction[30:21] << 1))) & 32'hfffffffe;
-              abandon <= 1;
-              need_ins_pc = next;
-              program_counter <= next;
-              flag = 1;
-            end
+              7'b1101111: begin
+                next = instruction_addr - 2'b10 + {{12{full_instruction[31]}}, full_instruction[19:12], full_instruction[20], full_instruction[30:21], 1'b0};
+                abandon <= 1;
+                need_ins_pc = next;
+                flag = 1;
+                program_counter <= next;
+              end
+            endcase
             tail = tail + 1;
             array_size = array_size + 1;
             if (!flag) begin
@@ -176,21 +194,26 @@ always @(posedge clk) begin
               end else begin
                 RISCVC_To_RISCV(instruction_data[31:16], output_expanded);
                 instruction_queue[tail] = {1'b1, output_expanded, instruction_addr + 2'b10};
-                if (output_expanded[6:0] == 7'b1100011) begin
-                  which_predictor = output_expanded[14:12];
-                  next = (if_jump ? instruction_addr + 2'b10 + ((output_expanded[31] ? 32'hfffff000 : 0) | (output_expanded[7] << 11) | (output_expanded[30:25] << 5) | (output_expanded[11:8] << 1)) : pc) & 32'hfffffffe;
-                  program_counter <= next;
-                  instruction_queue[tail][65] = if_jump;
-                  if (if_jump) begin
+                casez (output_expanded[6:0])
+                  7'b1100011: begin
+                    which_predictor = output_expanded[14:12];
+                    instruction_queue[tail][65] = if_jump;
+                    if (if_jump) begin
+                      next = instruction_addr + 2'b10 + {{20{output_expanded[31]}}, output_expanded[7], output_expanded[30:25], output_expanded[11:8], 1'b0};
+                      abandon <= 1;
+                      need_ins_pc = next;
+                    end else begin
+                      next = pc;
+                    end
+                    program_counter <= next;
+                  end  
+                  7'b1101111: begin
+                    next = instruction_addr + 2'b10 + {{12{output_expanded[31]}}, output_expanded[19:12], output_expanded[20], output_expanded[30:21], 1'b0};
                     abandon <= 1;
                     need_ins_pc = next;
+                    program_counter <= next;
                   end
-                end else if (output_expanded[6:0] == 7'b1101111) begin
-                  next = (instruction_addr + 2'b10 + ((output_expanded[31] ? 32'hfff00000 : 0) | (output_expanded[19:12] << 12) | (output_expanded[20] << 11) | (output_expanded[30:21] << 1))) & 32'hfffffffe;
-                  abandon <= 1;
-                  need_ins_pc = next;
-                  program_counter <= next;
-                end
+                endcase
                 tail = tail + 1;
                 array_size = array_size + 1;
               end
@@ -203,7 +226,7 @@ always @(posedge clk) begin
         program_counter <= next;
         // abandon <= 1;
       end
-      if (array_size < 62 && icache_ready) begin
+      if (array_size < 60 && icache_ready) begin
         addr <= next;
         program_counter <= (next + 4); 
         ready <= 1;
@@ -225,7 +248,6 @@ always @(posedge clk) begin
     end
     begin // Flush
       if (flush) begin
-        abandon = 0;
         abandon <= 0;
         array_size = 0;
         head = 0;
@@ -245,7 +267,7 @@ task RISCVC_To_RISCV (
 
 begin
     // $display("Compressed instruction: %b", compressed_instr);
-    case (compressed_instr[1:0])
+    casez (compressed_instr[1:0])
         2'b00: begin
             decode_opcode_00(compressed_instr, expanded_instr);
         end
@@ -267,7 +289,7 @@ task decode_opcode_00(
     output reg [31:0] expanded_instr
 );
 begin
-    case (compressed_instr[15:13])
+    casez (compressed_instr[15:13])
         3'b000: begin // C.ADDI4SPN
             expanded_instr = {
                 2'b00, compressed_instr[10:7], compressed_instr[12:11], compressed_instr[5], compressed_instr[6], 2'b00, // Immediate
@@ -305,7 +327,7 @@ task decode_opcode_01(
     output reg [31:0] expanded_instr
 );
     begin
-        case (compressed_instr[15:13])
+        casez (compressed_instr[15:13])
             3'b000: begin // C.ADDI
                 expanded_instr = {
                     {7{compressed_instr[12]}}, compressed_instr[6:2], // Immediate (sign-extended)
@@ -372,7 +394,7 @@ task decode_opcode_01(
                 end
             end
             3'b100: begin
-                case (compressed_instr[11:10])
+                casez (compressed_instr[11:10])
                     2'b00: begin
                         expanded_instr = {
                             6'b000000, compressed_instr[12], compressed_instr[6:2], // Immediate
@@ -398,7 +420,7 @@ task decode_opcode_01(
                         };
                     end
                     3'b11: begin
-                      case (compressed_instr[6:5])
+                      casez (compressed_instr[6:5])
                         2'b11: begin
                             expanded_instr = {
                                 7'b0000000, 2'b01, compressed_instr[4:2], // rs2
@@ -445,7 +467,7 @@ task decode_opcode_10(
     output reg [31:0] expanded_instr
 );
     begin
-        case (compressed_instr[15:13])
+        casez (compressed_instr[15:13])
             3'b000: begin // C.SLLI
                 expanded_instr = {
                     6'b000000, compressed_instr[12], compressed_instr[6:2], // Immediate
@@ -455,7 +477,7 @@ task decode_opcode_10(
                 };
             end
             3'b100: begin
-                case (compressed_instr[12])
+                casez (compressed_instr[12])
                     1'b0: begin // C.JR | C.MV
                         if (compressed_instr[6:2]) begin
                             expanded_instr = {
