@@ -13,6 +13,7 @@ module cpu(
 	
 	input  wire                 io_buffer_full, // 1 if uart buffer is full
 	
+	output wire [14:0]          dbg_info,
 	output wire [31:0]			dbgreg_dout		// cpu register output (debugging demo)
 );
 
@@ -29,17 +30,6 @@ module cpu(
 // - 0x30004 write: indicates program stop (will output '\0' through uart tx)
 
 wire [73:0] cdb; // cdb[31:0] for alu_data, cdb[36] for alu_done, cdb[35:32] for alu_tag, cdb[68:37] for ls_data, cdb[73] for ls_done, cdb[72:69] for ls_tag
-
-wire register_file_write_enable1;
-wire [4:0] register_file_write_addr1;
-wire [36:0] register_file_write_data1;
-wire register_file_write_enable2;
-wire [4:0] register_file_write_addr2;
-wire [36:0] register_file_write_data2;
-wire [4:0] register_file_read_addr1;
-wire [4:0] register_file_read_addr2;
-wire [36:0] register_file_read_data1;
-wire [36:0] register_file_read_data2;
 
 reg [31:0] pc;
 reg [3:0] head_tag;
@@ -106,25 +96,10 @@ wire [31:0] pc_set;
 wire instruction_unit_rob_is_half_instruction;
 
 wire instruction_rob_if_jump;
+wire [14:0] first_pc;
+wire [31:0] dbg_data;
 
 assign flush = rob_instruction_flush;
-
-register_file rf_unit(
-  .clk(clk_in),
-  .rst(rst_in),
-  .rdy(rdy_in),
-  .read_addr1(register_file_read_addr1),
-  .read_addr2(register_file_read_addr2),
-  .write_addr1(register_file_write_addr1),
-  .write_enable1(register_file_write_enable1),
-  .write_data1(register_file_write_data1),
-  .write_addr2(register_file_write_addr2),
-  .write_enable2(register_file_write_enable2),
-  .write_data2(register_file_write_data2),
-  .read_data1(register_file_read_data1),
-  .read_data2(register_file_read_data2),
-  .flush(flush)
-);
 
 alu alu_unit(
   .clk(clk_in),
@@ -204,21 +179,11 @@ reorder_buffer rob_unit(
   
   .bp_tag_in(bp_rob_tag_in),
   
-  .register_file_read_data1(register_file_read_data1),
-  
   .flush_input(flush),
   
   .flush_output(rob_instruction_flush),
   .head_tag(rob_head_tag_set),
   .need_jump(rob_need_jump_set),
-
-  .register_file_read_addr1(register_file_read_addr1),
-  .register_file_write_enable1(register_file_write_enable1),
-  .register_file_write_addr1(register_file_write_addr1),
-  .register_file_write_data1(register_file_write_data1),
-  .register_file_write_enable2(register_file_write_enable2),
-  .register_file_write_addr2(register_file_write_addr2),
-  .register_file_write_data2(register_file_write_data2),
 
   .instruction_ready(rob_instruction_instruction_ready),
   .instruction_jump_pc(rob_instruction_instruction_jump_pc),
@@ -230,7 +195,8 @@ reorder_buffer rob_unit(
   .branch_type(branch_type),
   .bp_tag_out(rob_bp_tag_out),
   .bp_jump(ins_if_jump),
-  .bp_has_predict(rob_bp_has_predict)
+  .bp_has_predict(rob_bp_has_predict),
+  .first_ins_pc(first_pc)
 );
 
 reservation_station rs_unit(
@@ -260,6 +226,7 @@ icache_memctl icache_memctl_unit(
   .mem_write_data(lsb_memctl_data),
   .instruction_addr(instruction_unit_icache_addr),
   .need_instruction(instruction_unit_icache_ready),
+  .io_buffer_full(io_buffer_full),
 
   .mem_dout(mem_dout),
   .mem_addr_out(mem_a),
@@ -307,21 +274,5 @@ always @(negedge clk_in) begin
   head_tag = rob_head_tag_set;
   pc = pc_set;
 end
-
-always @(posedge clk_in)
-  begin
-    if (rst_in)
-      begin
-      
-      end
-    else if (!rdy_in)
-      begin
-      
-      end
-    else
-      begin
-      
-      end
-  end
 
 endmodule

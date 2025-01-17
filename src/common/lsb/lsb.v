@@ -23,26 +23,43 @@ module load_store_buffer (
   output reg ls_ready
 );
 
-reg [95:0] lsb_queue[15:0];
+reg [1:0] lsb_queue_busy[15:0];
+reg [3:0] lsb_queue_tag[15:0];
+reg [11:0] lsb_queue_imm[15:0];
+reg [4:0] lsb_queue_addr_reg[15:0];
+reg [4:0] lsb_queue_data_reg[15:0];
+reg [31:0] lsb_queue_addr[15:0];
+reg [31:0] lsb_queue_data[15:0];
+reg [3:0] lsb_queue_op[15:0];
 
-reg [3:0] head, tail, i;
+reg [3:0] head, tail;
 
-reg [4:0] array_size, k;
+reg [4:0] array_size;
 
-integer rst_i;
+integer size_change;
 
 reg stop;
 
-reg flag;
-
-reg [3:0] processing_pos;
+initial begin : initialize
+  integer i;
+  for (i = 0; i < 16; i = i + 1) begin
+    lsb_queue_op[i] <= 0;
+    lsb_queue_busy[i] <= 0;
+    lsb_queue_tag[i] <= 0;
+    lsb_queue_imm[i] <= 0;
+    lsb_queue_addr_reg[i] <= 0;
+    lsb_queue_data_reg[i] <= 0;
+    lsb_queue_data[i] <= 0;
+    lsb_queue_addr[i] <= 0;
+  end
+end
 
 always @(posedge clk) begin
   if (rst) begin
-    stop = 0;
-    head = 0;
-    tail = 0;
-    array_size = 0;
+    stop <= 0;
+    head <= 0;
+    tail <= 0;
+    array_size <= 0;
     oprand <= 0;
     addr <= 0;
     data <= 0;
@@ -50,125 +67,101 @@ always @(posedge clk) begin
     ls_tag <= 0;
     ls_data <= 0;
     ls_ready <= 0;
-    processing_pos = 0;
-    for (rst_i = 0; rst_i < 16; rst_i = rst_i + 1) begin
-      lsb_queue[rst_i] = 0;
-    end
   end else if (!rdy) begin
   end else begin
-    ls_done <= 0;
-    ls_tag <= 0;
-    ls_data <= 0;
     begin // WorkInput
+      size_change = 0;
       if (instruction[1:0]) begin
-        lsb_queue[tail] = instruction;
-        tail = tail + 1;
-        array_size = array_size + 1;
+        lsb_queue_busy[tail] <= instruction[1:0];
+        lsb_queue_tag[tail] <= instruction[5:2];
+        lsb_queue_imm[tail] <= instruction[17:6];
+        if (cdb[36] && instruction[22] && instruction[21:18] == cdb[35:32]) begin
+          lsb_queue_addr[tail] <= cdb[31:0];
+          lsb_queue_addr_reg[tail] <= 0;
+        end else if (cdb[73] && instruction[22] && instruction[21:18] == cdb[72:69]) begin
+          lsb_queue_addr[tail] <= cdb[68:37];
+          lsb_queue_addr_reg[tail] <= 0;
+        end else begin
+          lsb_queue_addr[tail] <= instruction[59:28];
+          lsb_queue_addr_reg[tail] <= instruction[22:18];
+        end
+        if (cdb[36] && instruction[27] && instruction[26:23] == cdb[35:32]) begin
+          lsb_queue_data[tail] <= cdb[31:0];
+          lsb_queue_data_reg[tail] <= 0;
+        end else if (cdb[73] && instruction[27] && instruction[26:23] == cdb[72:69]) begin
+          lsb_queue_data[tail] <= cdb[68:37];
+          lsb_queue_data_reg[tail] <= 0;
+        end else begin
+          lsb_queue_data[tail] <= instruction[91:60];
+          lsb_queue_data_reg[tail] <= instruction[27:23];
+        end
+        lsb_queue_op[tail] <= instruction[95:92];
+        tail <= flush ? 0 : tail + 1;
+        size_change = size_change + 1;;
+      end else begin
+        tail <= flush ? 0 : tail;
       end
 
-      flag = 0;
       if (ready[1]) begin
-        // for (k = 0; k < 16; k = k + 1) begin : Loop1
-        //   // if (k < array_size) begin
-        //     i = k + head;
-        //     if (lsb_queue[i][1:0] == 2'b10) begin
-        lsb_queue[processing_pos][91:60] = mem_data;
-        lsb_queue[processing_pos][1:0] = 2'b11;
-              // disable Loop1;
-            // end
-          // end
-        // end
+        lsb_queue_busy[head] <= 2'b00;
+        ls_tag <= lsb_queue_tag[head];
+        ls_data <= mem_data;
+        ls_done <= flush ? 0 : 1;
+        head <= flush ? 0 : (head + 1);
+        size_change = size_change - 1;
+        stop <= 0;
+      end else begin
+        ls_done <= 0;
+        head <= flush ? 0 : head;
+        stop <= flush ? 0 : stop;
       end
 
-      if (array_size < 14) begin
+      if (array_size < 13) begin
         ls_ready <= 1;
       end else begin
         ls_ready <= 0;
       end
     end
     begin // WorkDependence
-      if (cdb[36]) begin
+      if (cdb[36]) begin : Loop1
+        integer k;
         for (k = 0; k < 16; k = k + 1) begin
-          if (lsb_queue[k][1:0] == 2'b01) begin
-            if (lsb_queue[k][27] && lsb_queue[k][26:23] == cdb[35:32]) begin
-              lsb_queue[k][91:60] = cdb[31:0];
-              lsb_queue[k][27] = 0;
-            end
-            if (lsb_queue[k][22] && lsb_queue[k][21:18] == cdb[35:32]) begin
-              lsb_queue[k][59:28] = cdb[31:0];
-              lsb_queue[k][22] = 0;
-            end
+          if (lsb_queue_data_reg[k][4] && lsb_queue_data_reg[k][3:0] == cdb[35:32]) begin
+            lsb_queue_data[k] <= cdb[31:0];
+            lsb_queue_data_reg[k][4] <= 0;
+          end
+          if (lsb_queue_addr_reg[k][4] && lsb_queue_addr_reg[k][3:0] == cdb[35:32]) begin
+            lsb_queue_addr[k] <= cdb[31:0];
+            lsb_queue_addr_reg[k][4] <= 0;
           end
         end
       end
-      if (cdb[73]) begin
+      if (cdb[73]) begin : Loop2
+        integer k;
         for (k = 0; k < 16; k = k + 1) begin
-          if (lsb_queue[k][1:0] == 2'b01) begin
-            if (lsb_queue[k][27] && lsb_queue[k][26:23] == cdb[72:69]) begin
-              lsb_queue[k][91:60] = cdb[68:37];
-              lsb_queue[k][27] = 0;
-            end
-            if (lsb_queue[k][22] && lsb_queue[k][21:18] == cdb[72:69]) begin
-              lsb_queue[k][59:28] = cdb[68:37];
-              lsb_queue[k][22] = 0;
-            end
+          if (lsb_queue_data_reg[k][4] && lsb_queue_data_reg[k][3:0] == cdb[72:69]) begin
+            lsb_queue_data[k] <= cdb[68:37];
+            lsb_queue_data_reg[k][4] <= 0;
+          end
+          if (lsb_queue_addr_reg[k][4] && lsb_queue_addr_reg[k][3:0] == cdb[72:69]) begin
+            lsb_queue_addr[k] <= cdb[68:37];
+            lsb_queue_addr_reg[k][4] <= 0;
           end
         end
-      end
-    end
-    begin // WorkOutput
-      ls_done <= 0;
-      if (lsb_queue[head][1:0] == 2'b11 && array_size) begin
-        ls_tag <= lsb_queue[head][5:2];
-        ls_data <= lsb_queue[head][91:60];
-        ls_done <= 1;
-        head = head + 1;
-        array_size = array_size - 1;
       end
     end
     begin // WorkMem
-      flag = 0;
-      oprand <= 0;
-      addr <= 0;
-      for (k = 0; k < 16; k = k + 1) begin
-        if (k < array_size && !flag) begin
-          i = k + head;
-          if (lsb_queue[i][95] == 0) begin
-            if (lsb_queue[i][27] == 0 && lsb_queue[i][22] == 0 && lsb_queue[i][1:0] == 2'b01 && ready && !stop) begin
-              oprand <= {1'b1, lsb_queue[i][95:92]};
-              addr <= $signed(lsb_queue[i][59:28]) + $signed(lsb_queue[i][17:6]);
-              lsb_queue[i][1:0] = 2'b10;
-              stop <= 1;
-              flag = 1;
-              processing_pos = i;
-            end
-          end else begin
-            flag = 1;
-          end
-        end
-      end
-      // $display("lsb_queue[%d] = %b, its tag is : %d", head, lsb_queue[head], lsb_queue[head][5:2]);
-      if (lsb_queue[head][95] && lsb_queue[head][1:0] == 2'b01 && head_tag == lsb_queue[head][5:2] && array_size && ready && !stop) begin
-        oprand <= {1'b1, lsb_queue[head][95:92]};
-        addr <= $signed(lsb_queue[head][59:28]) + $signed(lsb_queue[head][17:6]);
-        data <= lsb_queue[head][91:60];
-        lsb_queue[head][1:0] = 2'b10;
-        processing_pos = head;
+      if (|array_size && ready && !stop && !lsb_queue_addr_reg[head][4] && !lsb_queue_data_reg[head][4] && lsb_queue_busy[head] == 2'b01 && ((!lsb_queue_op[head][3] && (lsb_queue_addr[head] != 32'h00030000 || (lsb_queue_addr[head] == 32'h00030000 && head_tag == lsb_queue_tag[head]))) || (lsb_queue_op[head][3] && head_tag == lsb_queue_tag[head]))) begin
+        oprand <= flush ? 0 : {1'b1, lsb_queue_op[head]};
+        addr <= $signed(lsb_queue_addr[head]) + $signed(lsb_queue_imm[head]);
+        data <= lsb_queue_data[head];
+        lsb_queue_busy[head] <= 2'b10;
         stop <= 1;
-      end
-      if (stop) begin
-        stop <= 0;
-      end
-    end
-    begin // WorkFlush
-      if (flush) begin
-        head = 0;
-        tail = 0;
-        array_size = 0;
+      end else begin
         oprand <= 0;
-        ls_done <= 0;
       end
     end
+    array_size <= flush ? 0 : array_size + size_change;
   end
 end
 

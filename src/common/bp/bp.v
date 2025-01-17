@@ -33,7 +33,7 @@ always @(posedge clk) begin
   if (rst) begin
     bp_tag <= 0;
     for (i = 0; i < 16; i = i + 1) begin
-      predictor[i] = 0;
+      predictor[i] <= 0;
     end
     array_size = 0;
     for (i = 0; i < 16; i = i + 1) begin
@@ -59,11 +59,11 @@ always @(posedge clk) begin
         if (bp_array[i][4] && bp_array[i][8:5] == cdb[35:32]) begin
           if (cdb[31:0]) begin
             if (predictor[bp_array[i][3:0]] < 2'b11) begin
-              predictor[bp_array[i][3:0]] = predictor[bp_array[i][3:0]] + 1;
+              predictor[bp_array[i][3:0]] <= predictor[bp_array[i][3:0]] + 1;
             end
           end else begin
             if (predictor[bp_array[i][3:0]]) begin
-              predictor[bp_array[i][3:0]] = predictor[bp_array[i][3:0]] - 1;
+              predictor[bp_array[i][3:0]] <= predictor[bp_array[i][3:0]] - 1;
             end
           end
           // $display("predictor[%d] = %d, cdb[0] = %d, bp_array[i][9]= %d", bp_array[i][3:0], predictor[bp_array[i][3:0]], cdb[0], bp_array[i][9]);

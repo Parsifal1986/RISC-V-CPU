@@ -47,7 +47,12 @@ reg [31:0] need_ins_pc;
 
 reg flag;
 
-integer i;
+initial begin : initialize
+  integer i;
+  for (i = 0; i < 16; i = i + 1) begin
+    instruction_queue[i] = 0;
+  end
+end
 
 always @(posedge clk) begin
   if (rst) begin
@@ -59,14 +64,9 @@ always @(posedge clk) begin
     ready <= 0;
     program_counter <= 0;
     which_predictor <= 0;
-    for (i = 0; i < 16; i = i + 1) begin
-      instruction_queue[i] = 0;
-    end
     half_instruction = 0;
     full_instruction = 0;
-    abandon <= 0;
-    head = 0;
-    tail = 0;
+    abandon = 0;
     next = 0;
   end else if (!rdy) begin
   end else begin
@@ -74,7 +74,7 @@ always @(posedge clk) begin
       next = pc;
       if (icache_ready[1]) begin
         if (!abandon || (abandon && need_ins_pc == instruction_addr)) begin
-          abandon <= 0;
+          abandon = 0;
           if (!half_instruction) begin
             if (instruction_data[1:0] == 2'b11) begin
               instruction_queue[tail] = {instruction_data, instruction_addr};
@@ -84,18 +84,19 @@ always @(posedge clk) begin
                   instruction_queue[tail][65] = if_jump;
                   if (if_jump) begin
                     next = instruction_addr + {{20{instruction_data[31]}}, instruction_data[7], instruction_data[30:25], instruction_data[11:8], 1'b0};
-                    abandon <= 1;
+                    abandon = 1;
                     need_ins_pc = next;
                   end else begin
                     next = pc;
                   end
-                  program_counter <= next;
                 end
                 7'b1101111: begin
                   next = instruction_addr + {{12{instruction_data[31]}}, instruction_data[19:12], instruction_data[20], instruction_data[30:21], 1'b0};
-                  abandon <= 1;
-                  program_counter <= next;
+                  abandon = 1;
                   need_ins_pc = next;
+                end
+                default: begin
+                  
                 end
               endcase
               tail = tail + 1;
@@ -110,20 +111,21 @@ always @(posedge clk) begin
                   instruction_queue[tail][65] = if_jump;
                   if (if_jump) begin
                     next = instruction_addr + {{20{output_expanded[31]}}, output_expanded[7], output_expanded[30:25], output_expanded[11:8], 1'b0};
-                    abandon <= 1;
+                    abandon = 1;
                     flag = 1;
                     need_ins_pc = next;
                   end else begin
                     next = pc;
                   end
-                  program_counter <= next;
                 end
                 7'b1101111: begin
                   next = instruction_addr + {{12{output_expanded[31]}}, output_expanded[19:12], output_expanded[20], output_expanded[30:21], 1'b0};
-                  abandon <= 1;
+                  abandon = 1;
                   need_ins_pc = next;
                   flag = 1;
-                  program_counter <= next;
+                end
+                default: begin
+                  
                 end
               endcase
               tail = tail + 1;
@@ -140,18 +142,19 @@ always @(posedge clk) begin
                       instruction_queue[tail][65] = if_jump;
                       if (if_jump) begin
                         next = instruction_addr + 2'b10 + {{20{output_expanded[31]}}, output_expanded[7], output_expanded[30:25], output_expanded[11:8], 1'b0};
-                        abandon <= 1;
+                        abandon = 1;
                         need_ins_pc = next;
                       end else begin
                         next = pc;
                       end
-                      program_counter <= next;
                     end 
                     7'b1101111: begin
                       next = instruction_addr + 2'b10 + {{12{output_expanded[31]}}, output_expanded[19:12], output_expanded[20], output_expanded[30:21], 1'b0};
-                      abandon <= 1;
+                      abandon = 1;
                       need_ins_pc = next;
-                      program_counter <= next;
+                    end
+                    default: begin
+                      
                     end
                   endcase
                   tail = tail + 1;
@@ -170,20 +173,21 @@ always @(posedge clk) begin
                 instruction_queue[tail][65] = if_jump;
                 if (if_jump) begin
                   next = instruction_addr - 2'b10 + {{20{full_instruction[31]}}, full_instruction[7], full_instruction[30:25], full_instruction[11:8], 1'b0};
-                  abandon <= 1;
+                  abandon = 1;
                   flag = 1;
                   need_ins_pc = next;
                 end else begin
                   next = pc;
                 end
-                program_counter <= next;
               end
               7'b1101111: begin
                 next = instruction_addr - 2'b10 + {{12{full_instruction[31]}}, full_instruction[19:12], full_instruction[20], full_instruction[30:21], 1'b0};
-                abandon <= 1;
+                abandon = 1;
                 need_ins_pc = next;
                 flag = 1;
-                program_counter <= next;
+              end
+              default: begin
+                
               end
             endcase
             tail = tail + 1;
@@ -200,18 +204,21 @@ always @(posedge clk) begin
                     instruction_queue[tail][65] = if_jump;
                     if (if_jump) begin
                       next = instruction_addr + 2'b10 + {{20{output_expanded[31]}}, output_expanded[7], output_expanded[30:25], output_expanded[11:8], 1'b0};
-                      abandon <= 1;
+                      abandon = 1;
                       need_ins_pc = next;
                     end else begin
                       next = pc;
                     end
-                    program_counter <= next;
+  
                   end  
                   7'b1101111: begin
                     next = instruction_addr + 2'b10 + {{12{output_expanded[31]}}, output_expanded[19:12], output_expanded[20], output_expanded[30:21], 1'b0};
-                    abandon <= 1;
+                    abandon = 1;
                     need_ins_pc = next;
-                    program_counter <= next;
+  
+                  end
+                  default: begin
+                    
                   end
                 endcase
                 tail = tail + 1;
@@ -223,14 +230,13 @@ always @(posedge clk) begin
       end
       if (need_jump) begin
         next = jump_addr;
-        program_counter <= next;
-        // abandon <= 1;
       end
-      if (array_size < 60 && icache_ready) begin
+      if (array_size < 14 && icache_ready) begin
         addr <= next;
         program_counter <= (next + 4); 
         ready <= 1;
       end else begin
+        program_counter <= next;
         ready <= 0;
       end
     end
@@ -248,7 +254,7 @@ always @(posedge clk) begin
     end
     begin // Flush
       if (flush) begin
-        abandon <= 0;
+        abandon = 0;
         array_size = 0;
         head = 0;
         tail = 0;
@@ -453,7 +459,13 @@ task decode_opcode_01(
                                 7'b0110011 // SUB opcode
                             };
                         end
+                        default: begin
+                          
+                        end
                       endcase
+                    end
+                    default: begin
+                      
                     end
                 endcase
             end

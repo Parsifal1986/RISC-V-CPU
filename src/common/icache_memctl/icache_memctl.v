@@ -6,6 +6,7 @@ module icache_memctl(
   input wire [31:0] mem_addr_in,
   input wire [4:0] oprand,
   input wire [31:0] mem_write_data,
+  input wire io_buffer_full,
 
   input wire [31:0] instruction_addr,
   input wire need_instruction,
@@ -36,8 +37,7 @@ reg [3:0] current_reading_instruction_place;
 reg current_mem_if_write;
 reg [6:0] k;
 reg victim;
-reg [31:0] i;
-reg [31:0] current_mem_length, current_mem_place;
+reg [4:0] current_mem_length, current_mem_place;
 reg current_mem_if_signed;
 reg [31:0] current_mem_data;
 reg [31:0] tmp;
@@ -50,8 +50,21 @@ reg [33:0] mission [15:0]; // [33] = {is_instruction, is_read, addr}
 
 reg [3:0] head, tail, array_size, tmp2;
 
+integer m;
+
+initial begin : initialize
+  integer i;
+  for (i = 0; i < 512; i = i + 1) begin
+    cache_addr[i][0] = 0; cache_addr[i][1] = 0;
+    cache[i][0] = 0; cache[i][1] = 0;
+    cache_busy[i][0] = 0; cache_busy[i][1] = 0;
+  end
+  m = 0;
+end
+
 always @(posedge clk) begin
-  if (rst) begin
+  if (rst) begin : reset
+    integer i;
     mem_dout <= 0;
     mem_addr_out <= 0;
     mem_wr <= 0;
@@ -61,8 +74,6 @@ always @(posedge clk) begin
     instruction_addr_out <= 0;
     instruction_ready <= 0;
     for (i = 0; i < 512; i = i + 1) begin
-      cache_addr[i][0] = 0; cache_addr[i][1] = 0;
-      cache[i][0] = 0; cache[i][1] = 0;
       cache_busy[i][0] = 0; cache_busy[i][1] = 0;
     end
     current_reading_instruction = 0;
@@ -89,9 +100,9 @@ always @(posedge clk) begin
       mem_addr_out <= 0;
       mem_dout <= 0;
       mem_data <= 0;
-      flag = 0;
       if (need_instruction || has_next_instruction) begin
-        if (!current_reading_instruction_place) begin
+        if (!current_reading_instruction_place) begin : read_instruction
+          integer i;
           if (has_next_instruction) begin
             has_next_instruction = 0;
           end
@@ -122,7 +133,8 @@ always @(posedge clk) begin
       end
     end
     begin // WorkMem
-      if (oprand[4]) begin
+      if (oprand[4]) begin : read_mem
+        integer i;
         current_mem_place = 0;
         current_mem_if_signed = 0;
         current_mem_data = oprand[3] ? mem_write_data : 0;
@@ -177,6 +189,9 @@ always @(posedge clk) begin
             array_size = array_size + 4;
             current_mem_length = 4;
           end
+          default: begin
+            
+          end
         endcase
       end
     end
@@ -197,16 +212,12 @@ always @(posedge clk) begin
         current_mem_data = 0;
         has_sent[0] = 0;
         has_sent[1] = 0;
-        for (i = 0; i < 16; i = i + 1) begin
-          mission [i] = 0;
-        end
         head = 0;
         tail = 0;
         array_size = 0;
       end
     end
     begin // WorkMemRes
-      mem_wr <= 0;
       if (has_sent[1][34]) begin
         if (has_sent[1][33])begin
           tmp = current_reading_instruction_place & -current_reading_instruction_place;
@@ -215,6 +226,7 @@ always @(posedge clk) begin
             4'b0010: current_reading_instruction = current_reading_instruction | mem_data_in << 8;
             4'b0100: current_reading_instruction = current_reading_instruction | mem_data_in << 16;
             4'b1000: current_reading_instruction = current_reading_instruction | mem_data_in << 24;
+            default:;
           endcase
           current_reading_instruction_place = current_reading_instruction_place ^ tmp[3:0];
           // if (!cache_busy[has_sent[1][8:0]][0]) begin
@@ -234,6 +246,9 @@ always @(posedge clk) begin
           if (current_reading_instruction_place == 0) begin
             instruction_addr_out <= current_reading_instruction_addr;
             instruction_data <= current_reading_instruction;
+            if (current_reading_instruction == 32'h00008293) begin
+              flag = 1;
+            end
             instruction_ready[1] <= 1;
             current_reading_instruction = 0;
             current_reading_instruction_addr = 0;
@@ -248,48 +263,58 @@ always @(posedge clk) begin
       if (array_size) begin
         if (!mission[head][33]) begin
           if (mission[head][32]) begin
-            mem_addr_out <= mission[head][31:0];
+            mem_wr <= 0;
             has_sent[0] = {1'b1, mission[head]};
+            mem_addr_out <= mission[head][31:0];
             head = head + 1;
             array_size = array_size - 1;
           end else begin
             // if (!has_sent[1]) begin
-            mem_addr_out <= mission[head][31:0];
-            mem_dout <= ((current_mem_data >> (current_mem_place << 3)) & 8'hFF);
-            mem_wr <= 1;
-            current_mem_place = current_mem_place + 1;
-            head = head + 1;
-            array_size = array_size - 1;
+            if (!io_buffer_full) begin
+              mem_dout <= ((current_mem_data >> (current_mem_place << 3)) & 8'hFF);
+              mem_wr <= 1;
+              current_mem_place = current_mem_place + 1;
+              mem_addr_out <= mission[head][31:0];
+              head = head + 1;
+              array_size = array_size - 1;
+            end else begin
+              mem_wr <= 0;
+              mem_addr_out <= 0;
+            end
             // end
           end
         end else begin
-          mem_addr_out <= mission[head][31:0];
+          mem_wr <= 0;
           has_sent[0] = {1'b1, mission[head]};
+          mem_addr_out <= mission[head][31:0];
           head = head + 1;
           array_size = array_size - 1;
         end
       end
     end
     begin // WorkMemOutput
-      mem_ready <= 0;
       if (current_mem_place == current_mem_length) begin
         if (current_mem_length) begin
           mem_ready[1] <= 1;
+        end else begin
+          mem_ready[1] <= 0;
         end
+        current_mem_place = 0;
+        current_mem_length = 0;
+        mem_ready[0] <= 1;
         if (!current_mem_if_write) begin
-          if (current_mem_if_signed) begin
-            casez (current_mem_length)
-              1: current_mem_data = {{24{current_mem_data[7]}}, current_mem_data[7:0]};
-              2: current_mem_data = {{16{current_mem_data[15]}}, current_mem_data[15:0]};
-            endcase
-          end
+          casez (current_mem_length)
+            1: current_mem_data = {{24{current_mem_data[7] & current_mem_if_signed}}, current_mem_data[7:0]};
+            2: current_mem_data = {{16{current_mem_data[15] & current_mem_if_signed}}, current_mem_data[15:0]};
+            default:;
+          endcase
           mem_data <= current_mem_data;
         end else begin
           mem_data <= 1;
         end
-        current_mem_place = 0;
-        current_mem_length = 0;;
-        mem_ready[0] <= 1;
+      end else begin
+        mem_ready[0] <= 0;
+        mem_ready[1] <= 0;
       end
     end
     begin // Work InstructionOutput
